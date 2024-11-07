@@ -107,7 +107,7 @@ function parseInstructions(instructions: string) {
         const to = pos;
         const diff = B.minus(to, from);
         const inner = B.plus(from, B.sandwich(rotorXY60)(diff))
-        const gap: Gap = {from, inner, to, prev, name, next: ""}
+        const gap: Gap = {from, inner, to, prev, name, next: ""};
         gapsByName[name] = gap;
         gapsArray.push(gap);
         prev = name;
