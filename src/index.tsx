@@ -275,7 +275,7 @@ class Mesh {
     const outerspace = new Boundary();
     outerspace.name = "outerspace";
     loops.add(star).add(outerspace);
-    log(`initial loopss: ${star}, ${outerspace}`)
+    log(`initial loops: ${[...loops].join(", ")}`)
 
     for (const gap of gapsArray) {
       const inner = new Vertex();
@@ -376,21 +376,7 @@ class Mesh {
 
   logMesh() {
     for (const loop of this.loops) {
-      log("loop:", loop);
-      let i = 0;
-      const faceVertices = [];
-      for (let he of loop.halfEdges()) {
-        if (++i > 50) {
-          log("TOO MANY FACE EDGES");
-          break;
-        }
-        faceVertices.push(he.to);
-        // log();
-        // log("forw", he, he.twin, he.prev, he.next, he.from, he.from.name, he.to, he.to.name, he.loop? ?? "(noFace)");
-        // he = he.twin;
-        // log("back", he, he.twin, he.prev, he.next, he.from, he.from.name, he.to, he.to.name, he.loop? ?? "(noFace)");
-      }
-      log("  vertices:", faceVertices.map(vtx => vtx).join(" "));
+      log("loop:", loop, "=", ...[...loop.halfEdges()].flatMap(he => [he, he.to]));
     }
     for (const v of this.vertices) {
       const neighbors = [...v.neighbors()];
