@@ -358,6 +358,23 @@ class Mesh {
         }
         checkHE(he, loop);
       }
+      if (loop instanceof Face) {
+        [...loop.vertices()].forEach((v, i, array) => {
+          const v1 = array[(i + 1) % array.length];
+          const v2 = array[(i + 2) % array.length];
+          const v3 = array[(i + 3) % array.length];
+          const vol = B.wedgeProduct(
+            B.minus(v1.pos, v.pos),
+            B.minus(v2.pos, v.pos),
+            B.minus(v3.pos, v.pos),
+          );
+          if (!closeTo0(vol)) {
+            fail(`face ${loop} not flat (${vol}): ${
+              [v, v1, v2, v3].flatMap(vtx => [vtx, vtx.pos]).join(", ")
+            }`);
+          }
+        })
+      }
     }
     for (const vertex of vertices) {
       let i = 0;
@@ -417,6 +434,7 @@ class Mesh {
       [...v.neighbors()].forEach(recur);
     }
     recur(he2.next.to);
+    log(`beyond ${p} and ${q}: {${[...beyond].join(", ")}}`)
     return beyond;
   }
 }
@@ -451,12 +469,10 @@ function fold(folding: Gap[]) {
 
   log("---------------------------------------------------------");
   const beyond_pq = mesh.splitFace(face, p, q);
-  log("beyond1:", [...beyond_pq.values()].map(v => v.name).join(", "));
   mesh.logMesh();
 
   log("---------------------------------------------------------");
   const beyond_qr = mesh.splitFace(face, q, r);
-  log("beyond2:", [...beyond_qr.values()].map(v => v.name).join(", "));
   mesh.logMesh();
 
   for (const vtx of beyond_pq) {
@@ -493,14 +509,27 @@ function fold(folding: Gap[]) {
     );
   }
 
-  for (const {beyond, tip} of [{beyond: beyond_pq, tip: tip1}, {beyond: beyond_qr, tip: tip2}]) {
-    const dir1 = B.normalize(B.minus(inters1, q.pos));
-    const dir2 = B.normalize(B.minus(tip.pos, q.pos));
+  for (const {beyond, tip, other} of [
+    {beyond: beyond_pq, tip: tip1, other: p},
+    {beyond: beyond_qr, tip: tip2, other: r},
+  ]) {
+    // TODO use CGA?
+    const pivot = projectPointToLine(tip.pos, q.pos, other.pos);
+    assert(closeTo0(B.minus(projectPointToLine(inters1, q.pos, other.pos), pivot)));
+    const dir1 = B.normalize(B.minus(inters1, pivot));
+    const dir2 = B.normalize(B.minus(tip.pos, pivot));
     const dirMid = B.normalize(B.plus(dir1, dir2));
     const rot = B.geometricProduct(dir1, dirMid);
     const transform = (point: Multivector<never>) =>
-      B.plus(B.sandwich(rot)(B.minus(point, q.pos)), q.pos);
+      B.plus(B.sandwich(rot)(B.minus(point, pivot)), pivot);
+    const angle = B.getAngle(B.minus(tip.pos, pivot), B.minus(inters1, pivot));
+    log(`rotation around: ${q}@${q.pos} - ${other}@${other.pos}`,
+      `\n  pivot: ${pivot}`,
+      `\n  axis: ${B.minus(other.pos, q.pos)}`,
+      `\n  angle: ${(angle * 180 / Math.PI).toFixed(5)}° = ${angle}`,
+    );
     for (const vtx of beyond) {
+      log(`  rotate ${vtx} from ${vtx.pos} to ${transform(vtx.pos)}`);
       vtx.pos = transform(vtx.pos);
     }
   }
@@ -583,19 +612,55 @@ function assert(test: boolean) {
   }
 }
 
+/** Project the first point to the line given by the other two points. */
+function projectPointToLine(
+  p: Multivector<never>,
+  q: Multivector<never>,
+  r: Multivector<never>,
+) {
+  const qp = B.minus(p, q)
+  const qr = B.minus(r, q);
+  const qf = B.scale(B.scalarProduct(qr, qp) / B.scalarProduct(qr, qr), qr)
+  return B.plus(q, qf);
+}
+
+// Quick test for projectPointToLine(...):
+if (false) {
+  const p = B.vec([8,1,2]);
+  const q = B.vec([1,4,-2]);
+  const r = B.vec([3,1,7]);
+  const foot = projectPointToLine(p, q, r);
+  // Vectors foot-p and r-q are perpendicular:
+  assert(Math.abs(B.scalarProduct(
+    B.minus(foot, p),
+    B.minus(r, q),
+  )) < 1e-8);
+  // Vectors q-foot and r-foot are collinear:
+  assert(closeTo0(B.wedgeProduct(
+    B.minus(q, foot),
+    B.minus(r, foot),
+  )));
+  log(`test for projectPointToLine(...) succeeded: ${foot}`);
+}
+
+
 function main() {
-  log(theInstructions);
+  try {
+    log(theInstructions);
 
-  const {gapsArray, gapsByName, foldings} = parseInstructions(theInstructions);
-  // emit(JSON.stringify(parseInstructions(theInstructions), null, 2));
+    const {gapsArray, gapsByName, foldings} = parseInstructions(theInstructions);
+    // emit(JSON.stringify(parseInstructions(theInstructions), null, 2));
 
-  mesh = new Mesh(gapsArray);
-  mesh.logMesh();
+    mesh = new Mesh(gapsArray);
+    mesh.logMesh();
 
-  verticesByName = Object.fromEntries([...mesh.vertices].map(v => [v.name, v]))
+    verticesByName = Object.fromEntries([...mesh.vertices].map(v => [v.name, v]))
 
-  for (const folding of foldings) {
-    fold(folding);
+    for (const folding of foldings) {
+      fold(folding);
+    }
+  } catch (e) {
+    log(`CAUGHT EXCEPTION: ${e}`);
   }
 }
 
