@@ -137,7 +137,7 @@ abstract class WithId {
 }
 
 class HalfEdge extends WithId {
-  face: Face;
+  loop: Loop;
 
   prev: HalfEdge;
   twin: HalfEdge;
@@ -150,7 +150,7 @@ class HalfEdge extends WithId {
 }
 
 function findHE(from: Vertex, to: Vertex) {
-  const results = [];
+  const results: HalfEdge[] = [];
   for (const he of from.halfEdgesOut()) {
     if (he.to === to) {
       results.push(he);
@@ -160,10 +160,10 @@ function findHE(from: Vertex, to: Vertex) {
   return results[0];
 }
 
-function makeEdge(f1: Face, f2: Face, to1: Vertex, to2: Vertex) {
+function makeEdge(f1: Loop, f2: Loop, to1: Vertex, to2: Vertex) {
   const he1 = new HalfEdge(), he2 = new HalfEdge();
   he1.twin = he2; he2.twin = he1;
-  he1.face = f1 ; he2.face = f2;
+  he1.loop = f1 ; he2.loop = f2;
   he1.to   = to1; he2.to   = to2;
   log(`new edge ${he1}|${he2} connecting ${to2} - ${to1} separating ${f1} | ${f2}`);
   return [he1, he2];
@@ -191,7 +191,7 @@ class Vertex extends WithId {
       if (++count > 50) {
         log(`too many half edges around ${this}`);
         for (let i = 1, he = this.firstHalfEdgeOut; i < 50; i++, he = he.twin.next) {
-          log(`  ${he}  ${he.face}  ${he.to}`);
+          log(`  ${he}  ${he.loop}  ${he.to}`);
         }
         fail(`too many half edges around ${this}`);
       }
@@ -205,9 +205,9 @@ class Vertex extends WithId {
     }
   }
 
-  *faces() {
+  *loops() {
     for (const he of this.halfEdgesOut()) {
-      yield he.face;
+      yield he.loop;
     }
   }
 
@@ -222,7 +222,7 @@ class Vertex extends WithId {
   }
 }
 
-class Face extends WithId {
+abstract class Loop extends WithId {
   name: string;
   firstHalfEdge: HalfEdge;
 
@@ -234,7 +234,7 @@ class Face extends WithId {
       if (++count > 50) {
         log(`too many half edges around ${this}`);
         for (let i = 1, he = this.firstHalfEdge; i < 50; i++, he = he.next) {
-          log(`  ${he}  ${he.face}  ${he.to}`);
+          log(`  ${he}  ${he.loop}  ${he.to}`);
         }
         fail(`too many half edges around ${this}`);
       }
@@ -250,29 +250,32 @@ class Face extends WithId {
 
   *neighbors() {
     for (const he of this.halfEdges()) {
-      yield he.twin.face;
+      yield he.twin.loop;
     }
-  }
-
-  toString() {
-    return `f${this.id}/${this.name}`;
   }
 }
 
+class Face extends Loop {
+  toString() { return `f${this.id}/${this.name}`; }
+}
+
+class Boundary extends Loop {
+  toString() { return `b${this.id}/${this.name}`; }
+}
+
 class Mesh {
-  innerFaces = new Set<Face>();
-  outerspace: Face;
+  loops = new Set<Loop>();
   vertices = new Set<Vertex>();
 
   constructor(gapsArray: Gap[]) {
-    const {innerFaces, vertices} = this;
+    const {loops, vertices} = this;
     const corners: Vertex[] = [];
     const star = new Face();
     star.name = "star";
-    this.outerspace = new Face();
-    this.outerspace.name = "outerspace";
-    innerFaces.add(star);
-    log(`initial faces: ${star}, ${this.outerspace}`)
+    const outerspace = new Boundary();
+    outerspace.name = "outerspace";
+    loops.add(star).add(outerspace);
+    log(`initial loopss: ${star}, ${outerspace}`)
 
     for (const gap of gapsArray) {
       const inner = new Vertex();
@@ -292,7 +295,7 @@ class Mesh {
 
     corners.forEach((vertex, i) => {
       const prev = corners.at(i - 1);
-      const [he1, he2] = makeEdge(star, this.outerspace, vertex, prev);
+      const [he1, he2] = makeEdge(star, outerspace, vertex, prev);
       innerLoop.push(he1);
       outerLoop.unshift(he2);
       vertex.firstHalfEdgeOut = he2;
@@ -301,7 +304,7 @@ class Mesh {
     chainHEs(outerLoop.at(-1), ...outerLoop);
 
     star.firstHalfEdge = innerLoop[0];
-    this.outerspace.firstHalfEdge = outerLoop[0];
+    outerspace.firstHalfEdge = outerLoop[0];
     this.checkMesh();
   }
 
@@ -314,7 +317,7 @@ class Mesh {
       fail(msg);
     }
 
-    const {vertices, innerFaces, outerspace} = this;
+    const {vertices, loops} = this;
 
     function checkHE(he: HalfEdge, connectedFrom: any) {
       if (he.twin.twin !== he) {
@@ -326,34 +329,34 @@ class Mesh {
       if (he.next.prev !== he) {
         emitError(`inconsistent next/prev: ${he} -> ${he.next} -> ${he.next.prev}`);
       }
-      if (he.prev.face !== he.face) {
-        emitError(`inconsistent he.prev.face: ${he} ${he.face} vs. ${he.prev} ${he.prev.face}`)
+      if (he.prev.loop !== he.loop) {
+        emitError(`inconsistent he.prev.loop: ${he} ${he.loop} vs. ${he.prev} ${he.prev.loop}`)
       }
-      if (he.next.face !== he.face) {
-        emitError(`inconsistent he.next.face: ${he} ${he.face} vs. ${he.next} ${he.next.face}`)
+      if (he.next.loop !== he.loop) {
+        emitError(`inconsistent he.next.loop: ${he} ${he.loop} vs. ${he.next} ${he.next.loop}`)
       }
       if (!vertices.has(he.to)) {
         emitError(`${he} connected from ${connectedFrom} references missing vertex ${he.to}`);
       }
-      if (!innerFaces.has(he.face) && he.face !== outerspace) {
-        emitError(`${he} connected from ${connectedFrom} references missing face ${he.face}`);
+      if (!loops.has(he.loop)) {
+        emitError(`${he} connected from ${connectedFrom} references missing loop ${he.loop}`);
       }
     }
 
     // Some inconsistencies are reported multiple times.
     // Do we catch all inconsistencies?
 
-    for (const face of [outerspace, ...innerFaces]) {
+    for (const loop of loops) {
       let i = 0;
-      for (const he of face.halfEdges()) {
+      for (const he of loop.halfEdges()) {
         if (i > 50) {
-          emitError(`boundary of face ${face} too long`)
+          emitError(`loop ${loop} too long`)
         }
-        if (he.face !== face) {
-          log(`face border [${face}]:`, [...face.halfEdges()].map(he => `\n  ${he}  ${he.face}  ${he.to}`).join(""));
-          emitError(`${he}: he.face ${he.face} should be ${face}`);
+        if (he.loop !== loop) {
+          log(`loop [${loop}]:`, [...loop.halfEdges()].map(he => `\n  ${he}  ${he.loop}  ${he.to}`).join(""));
+          emitError(`${he}: he.loop ${he.loop} should be ${loop}`);
         }
-        checkHE(he, face);
+        checkHE(he, loop);
       }
     }
     for (const vertex of vertices) {
@@ -372,20 +375,20 @@ class Mesh {
   }
 
   logMesh() {
-    for (const face of this.innerFaces) {
-      log("face:", face);
+    for (const loop of this.loops) {
+      log("loop:", loop);
       let i = 0;
       const faceVertices = [];
-      for (let he of face.halfEdges()) {
+      for (let he of loop.halfEdges()) {
         if (++i > 50) {
           log("TOO MANY FACE EDGES");
           break;
         }
         faceVertices.push(he.to);
         // log();
-        // log("forw", he, he.twin, he.prev, he.next, he.from, he.from.name, he.to, he.to.name, he.face? ?? "(noFace)");
+        // log("forw", he, he.twin, he.prev, he.next, he.from, he.from.name, he.to, he.to.name, he.loop? ?? "(noFace)");
         // he = he.twin;
-        // log("back", he, he.twin, he.prev, he.next, he.from, he.from.name, he.to, he.to.name, he.face? ?? "(noFace)");
+        // log("back", he, he.twin, he.prev, he.next, he.from, he.from.name, he.to, he.to.name, he.loop? ?? "(noFace)");
       }
       log("  vertices:", faceVertices.map(vtx => vtx).join(" "));
     }
@@ -395,7 +398,7 @@ class Mesh {
         v.toString().padEnd(15), v.firstHalfEdgeOut,
         v.pos.toString().padEnd(50),
         neighbors.length, "neighbors:", neighbors.join(" ").padEnd(35),
-        "faces:", [...v.faces()].join(" "),
+        "faces:", [...v.loops()].join(" "),
       );
     }
   }
@@ -405,20 +408,20 @@ class Mesh {
     const newFace = new Face();
     newFace.name = `split(${p.name}-${q.name})`;
     const [he1, he2] = makeEdge(face, newFace, q, p);
-    const he1Prev = [...p.halfEdgesIn ()].find(he => he.face === face);
-    const he1Next = [...q.halfEdgesOut()].find(he => he.face === face);
-    const he2Prev = [...q.halfEdgesIn ()].find(he => he.face === face);
-    const he2Next = [...p.halfEdgesOut()].find(he => he.face === face);
+    const he1Prev = [...p.halfEdgesIn ()].find(he => he.loop === face);
+    const he1Next = [...q.halfEdgesOut()].find(he => he.loop === face);
+    const he2Prev = [...q.halfEdgesIn ()].find(he => he.loop === face);
+    const he2Next = [...p.halfEdgesOut()].find(he => he.loop === face);
     chainHEs(he1Prev, he1, he1Next);
     chainHEs(he2Prev, he2, he2Next);
     face.firstHalfEdge = he1;
     newFace.firstHalfEdge = he2;
     for (const he of newFace.halfEdges()) {
-      log(`###A: setting face of ${he} from ${he.face} to ${newFace}`);
-      he.face = newFace;
+      log(`###A: setting face of ${he} from ${he.loop} to ${newFace}`);
+      he.loop = newFace;
     }
 
-    this.innerFaces.add(newFace);
+    this.loops.add(newFace);
     mesh.checkMesh();
 
     const beyond = new Set<Vertex>();
@@ -442,10 +445,11 @@ let verticesByName: Record<string, Vertex>;
 
 function fold(folding: Gap[]) {
   log("=".repeat(160));
-  const {innerFaces, vertices} = mesh;
+  const {loops, vertices} = mesh;
   const foldingVertices = folding.map(gap => verticesByName[gap.name]);
-  const matches = [...innerFaces].filter(face => {
-    const faceVertices = [...face.vertices()];
+  const matches = [...loops].filter(loop => {
+    if (!(loop instanceof Face)) return false;
+    const faceVertices = [...loop.vertices()];
     return foldingVertices.every(v => faceVertices.includes(v));
   });
   if (matches.length !== 1) {
@@ -475,8 +479,8 @@ function fold(folding: Gap[]) {
     }
   }
 
-  const tip1 = [...q.halfEdgesOut()].find(he => he.face === mesh.outerspace).to;
-  const tip2 = [...q.halfEdgesIn ()].find(he => he.face === mesh.outerspace).from;
+  const tip1 = [...q.halfEdgesOut()].find(he => he.loop instanceof Boundary).to;
+  const tip2 = [...q.halfEdgesIn ()].find(he => he.loop instanceof Boundary).from;
 
   log("points:", [p, tip1, q, tip2, r].map(point =>
     `\n  ${point.name}: ${point.pos.toString()}`
@@ -528,10 +532,11 @@ function fold(folding: Gap[]) {
     }
     const he_tip1_q = findHE(tip1, q), he_q_tip1 = he_tip1_q.twin;
     const he_q_tip2 = findHE(q, tip2), he_tip2_q = he_q_tip2.twin;
-    assert(he_q_tip1.face === mesh.outerspace);
-    assert(he_tip2_q.face === mesh.outerspace);
-    assert(he_q_tip1.next.face === mesh.outerspace);
-    assert(he_tip2_q.prev.face === mesh.outerspace);
+    const boundary = he_q_tip1.loop;
+    assert(boundary instanceof Boundary);
+    assert(he_tip2_q.loop === boundary);
+    assert(he_q_tip1.next.loop === boundary);
+    assert(he_tip2_q.prev.loop === boundary);
     log(`Half edges ${he_tip2_q} and ${he_q_tip1} should become unreachable`);
     const hes_to_tip = [...tip1.halfEdgesIn(), ...tip2.halfEdgesIn()];
 
@@ -547,7 +552,7 @@ function fold(folding: Gap[]) {
     he_tip1_q.twin = he_q_tip2;
 
     chainHEs(he_tip2_q.prev, he_q_tip1.next);
-    mesh.outerspace.firstHalfEdge = he_q_tip1.next;
+    boundary.firstHalfEdge = he_q_tip1.next;
 
     q.firstHalfEdgeOut = he_q_tip2;
     tip.firstHalfEdgeOut = he_tip1_q;
@@ -566,21 +571,21 @@ function fold(folding: Gap[]) {
     );
     log("vol:", spannedVolume);
     if (closeTo0(spannedVolume)) {
-      log(`merging coplanar faces ${he_q_tip2.face} and ${he_tip1_q.face}`);
+      log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q.loop}`);
       chainHEs(he_q_tip2.prev, he_tip1_q.next);
       chainHEs(he_tip1_q.prev, he_q_tip2.next);
 
       const newFace = new Face();
-      newFace.name = `(${he_q_tip2.face.name} + ${he_tip1_q.face.name})`;
+      newFace.name = `(${he_q_tip2.loop.name} + ${he_tip1_q.loop.name})`;
       newFace.firstHalfEdge = he_tip1_q.next;
       for (const he of newFace.halfEdges()) {
-        log(`BA: setting face of ${he} from ${he.face} to ${newFace}`);
-        he.face = newFace;
+        log(`BA: setting face of ${he} from ${he.loop} to ${newFace}`);
+        he.loop = newFace;
       }
-      innerFaces.delete(he_q_tip2.face);
-      innerFaces.delete(he_tip1_q.face);
-      innerFaces.add(newFace);
-      log(`merged faces ${he_q_tip2.face} and ${he_tip1_q.face} to ${newFace}`);
+      loops.delete(he_q_tip2.loop);
+      loops.delete(he_tip1_q.loop);
+      loops.add(newFace);
+      log(`merged faces ${he_q_tip2.loop} and ${he_tip1_q.loop} to ${newFace}`);
     }
   }
 }
