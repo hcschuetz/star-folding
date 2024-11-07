@@ -35,9 +35,9 @@ i 4 3
 j 2 2
 k 1 12 12
 .
-f g h
-d h i
-# i k a
+bend2 f g h
+bend2 d h i
+# bend2 i k a
 `;
 
 const r3 = Math.sqrt(3), r3half = r3 / 2;
@@ -76,7 +76,7 @@ function parseInstructions(instructions: string) {
   const gapsArray: Gap[] = [];
   const gapsByName: Record<string, Gap> = {};
   const foldings: Gap[][] = [];
-  let section: "polygon" | "folds" = "polygon";
+  let section: "polygon" | "transformations" = "polygon";
   let pos = B.vec([0, 0, 0]);
   let prev = "";
   for (let line of instructions.trim().split(/\r?\n/)) {
@@ -96,7 +96,7 @@ function parseInstructions(instructions: string) {
           });
           gapsArray[0].prev = gapsArray.at(-1).name;
 
-          section = "folds";
+          section = "transformations";
           break;
         }
         const from = pos;
@@ -113,13 +113,22 @@ function parseInstructions(instructions: string) {
         prev = name;
         break;
       }
-      case "folds": {
-        if (words.length !== 3) {
-          console.error("folding instruction with bad length:", ...words);
-        } else if (!words.every(word => Object.hasOwn(gapsByName, word))) {
-          console.error("bad point reference in folding instruction:", ...words);
-        } else {
-          foldings.push(words.map(name => gapsByName[name]));
+      case "transformations": {
+        const cmd = words.shift();
+        switch(cmd) {
+          case "bend2": {
+            if (words.length !== 3) {
+              console.error("folding instruction with bad length:", ...words);
+            } else if (!words.every(word => Object.hasOwn(gapsByName, word))) {
+              console.error("bad point reference in folding instruction:", ...words);
+            } else {
+              foldings.push(words.map(name => gapsByName[name]));
+            }
+            break;
+          }
+          default: {
+            fail(`unknown command: "${cmd}"`);
+          }
         }
         break;
       }
