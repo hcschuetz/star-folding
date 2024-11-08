@@ -5,7 +5,11 @@ import './style.css';
 import { B, baseToRepr, distance, embedInR, makeSphere, R, reprToBase, splitPointPair } from './geometric-algebra/conformal';
 import { fail, Multivector } from './geometric-algebra/Algebra';
 
+type MV = Multivector<never>;
+
 const output = signal("");
+
+const background = signal("#fee");
 
 function log(...args: any[]) {
   output.value += args.join(" ") + "\n";
@@ -15,14 +19,14 @@ export function App() {
   return (
     <div>
       <h1>Output</h1>
-      <pre style={{background: "#eee"}}>{output}</pre>
+      <pre style={{background: background.value}}>{output}</pre>
     </div>
   );
 }
 
 render(<App />, document.getElementById('app'));
 
-const theInstructions = `
+const polygonDef = `
 a 11
 b 10
 c 10 9
@@ -34,7 +38,9 @@ h 4 4
 i 4 3
 j 2 2
 k 1 12 12
-.
+`;
+
+const actionsDef = `
 bend2 f g h
 bend2 d h i
 # bend2 i k a
@@ -42,100 +48,64 @@ bend2 d h i
 
 const r3 = Math.sqrt(3), r3half = r3 / 2;
 
-const steps = Object.fromEntries(Object.entries({
-  "12": [ 0 * r3half,  1  ],
-   "1": [ 1 * r3half,  1.5],
-   "2": [ 1 * r3half,  0.5],
-   "3": [ 2 * r3half,  0  ],
-   "4": [ 1 * r3half, -0.5],
-   "5": [ 1 * r3half, -1.5],
-   "6": [ 0 * r3half, -1  ],
-   "7": [-1 * r3half, -1.5],
-   "8": [-1 * r3half, -0.5],
-   "9": [-2 * r3half,  0  ],
-  "10": [-1 * r3half,  0.5],
-  "11": [-1 * r3half,  1.5],
-}).map(([k, [x, y]]) => [k, B.vec([x, y, 0])]));
-
-/** The gap between to rays of the star. */
-type Gap = {
-  from: Multivector<never>,
-  inner: Multivector<never>,
-  to: Multivector<never>,
-  prev: string,
-  name: string,
-  next: string,
-}
-
-const closeTo0 = (mv: Multivector<never>) =>
-  [...mv].every(([, val]) => Math.abs(val) < 1e-8);
+const steps = {
+  "12": B.vec([ 0 * r3half,  2 / 2, 0]),
+   "1": B.vec([ 1 * r3half,  3 / 2, 0]),
+   "2": B.vec([ 1 * r3half,  1 / 2, 0]),
+   "3": B.vec([ 2 * r3half,  0 / 2, 0]),
+   "4": B.vec([ 1 * r3half, -1 / 2, 0]),
+   "5": B.vec([ 1 * r3half, -3 / 2, 0]),
+   "6": B.vec([ 0 * r3half, -2 / 2, 0]),
+   "7": B.vec([-1 * r3half, -3 / 2, 0]),
+   "8": B.vec([-1 * r3half, -1 / 2, 0]),
+   "9": B.vec([-2 * r3half,  0 / 2, 0]),
+  "10": B.vec([-1 * r3half,  1 / 2, 0]),
+  "11": B.vec([-1 * r3half,  3 / 2, 0]),
+};
 
 const rotorXY60  = B.mv({1: r3half, xy: -.5});
+const rotXY60 = B.sandwich(rotorXY60);
 
-function parseInstructions(instructions: string) {
-  const gapsArray: Gap[] = [];
-  const gapsByName: Record<string, Gap> = {};
-  const foldings: Gap[][] = [];
-  let section: "polygon" | "transformations" = "polygon";
-  let pos = B.vec([0, 0, 0]);
-  let prev = "";
-  for (let line of instructions.trim().split(/\r?\n/)) {
-    line = line.trim();
-    if (!line || line.startsWith("#")) continue;
-    const words = line.split(/\s+/);
-    switch (section) {
-      case "polygon": {
-        if (words[0] === ".") {
-          if (!closeTo0(pos)) {
-            console.error("polygon not closed; offset:", pos);
-          }
+/**
+ * One of the cut-out triangles (green in the Thurston paper).
+ * We only give one star tip (= vertex of the overall polygon) called "from"
+ * and the inward-pointing vertex "inner".
+ * The other star tip (which would be called "to") is available as "from"
+ * in the (circularly) next entry of the Gap array.
+ */
+type Gap = {
+  name: string,
+  fromPos: MV,
+  innerPos: MV,
 
-          // complete gap linking:
-          gapsArray.forEach((gap, i) => {
-            gap.next = gapsArray[(i + 1) % gapsArray.length].name;
-          });
-          gapsArray[0].prev = gapsArray.at(-1).name;
+  from?: Vertex,
+  inner?: Vertex,
+};
 
-          section = "transformations";
-          break;
-        }
-        const from = pos;
-        const name = words.shift();
-        for (const word of words) {
-          pos = B.plus(pos, steps[word]);
-        }
-        const to = pos;
-        const diff = B.minus(to, from);
-        const inner = B.plus(from, B.sandwich(rotorXY60)(diff))
-        const gap: Gap = {from, inner, to, prev, name, next: ""};
-        gapsByName[name] = gap;
-        gapsArray.push(gap);
-        prev = name;
-        break;
-      }
-      case "transformations": {
-        const cmd = words.shift();
-        switch(cmd) {
-          case "bend2": {
-            if (words.length !== 3) {
-              console.error("folding instruction with bad length:", ...words);
-            } else if (!words.every(word => Object.hasOwn(gapsByName, word))) {
-              console.error("bad point reference in folding instruction:", ...words);
-            } else {
-              foldings.push(words.map(name => gapsByName[name]));
-            }
-            break;
-          }
-          default: {
-            fail(`unknown command: "${cmd}"`);
-          }
-        }
-        break;
-      }
+function getGaps(def: string): Gap[] {
+  let currentPos = B.vec([0, 0, 0]);
+  return def.trim().split(/\r?\n/).map(line => {
+    const [name, ...moves] = line.trim().split(/\s+/);
+    const fromPos = currentPos;
+    for (const move of moves) {
+      currentPos = B.plus(currentPos, steps[move] ?? fail(`unknown step: ${move}`))
     }
-  }
-  return {gapsArray, gapsByName, foldings};
+    const innerPos = B.plus(fromPos, rotXY60(B.minus(currentPos, fromPos)));
+    log(`${name}: from ${fromPos} inner ${innerPos}`);
+    return {name, fromPos, innerPos}
+  });
 }
+
+const parseActions = (def: string) =>
+  def.trim().split(/\r?\n/)
+  .filter(line => !line.startsWith("#"))
+  .map(line => {
+    const [cmd, ...args] = line.trim().split(/\s+/);
+    return {cmd, args}
+  });
+
+const closeTo0 = (mv: MV) =>
+  [...mv].every(([, val]) => Math.abs(val) < 1e-8);
 
 abstract class WithId {
   static count = 0;
@@ -147,7 +117,13 @@ abstract class WithId {
 
 class HalfEdge extends WithId {
   loop: Loop;
-  peer: HalfEdge | null = null; // non-null if loop is a boundary
+  /**
+   * A symmetric relation for boundary half edges.
+   * Two half edges are peers if they are expected to be glued together in the
+   * final polyhedron.
+   * The peer relation is (at least for now) only used for redundancy.
+   */
+  peer: HalfEdge | null = null;
 
   prev: HalfEdge;
   twin: HalfEdge;
@@ -191,7 +167,7 @@ function chainHEs(first: HalfEdge, ...rest: HalfEdge[]) {
 class Vertex extends WithId {
   firstHalfEdgeOut: HalfEdge;
   name: string;
-  pos: Multivector<never>;
+  pos: MV;
 
   *halfEdgesOut() {
     let he = this.firstHalfEdgeOut;
@@ -276,10 +252,10 @@ class Boundary extends Loop {
 class Mesh {
   loops = new Set<Loop>();
   vertices = new Set<Vertex>();
+  verticesByName: Record<string, Vertex> = {};
 
-  constructor(gapsArray: Gap[]) {
-    const {loops, vertices} = this;
-    const corners: Vertex[] = [];
+  constructor(gaps: Gap[]) {
+    const {loops, vertices, verticesByName} = this;
     const star = new Face();
     star.name = "star";
     const outerspace = new Boundary();
@@ -287,38 +263,44 @@ class Mesh {
     loops.add(star).add(outerspace);
     log(`initial loops: ${[...loops].join(", ")}`)
 
-    for (const gap of gapsArray) {
-      const inner = new Vertex();
-      inner.name = gap.name;
-      inner.pos = gap.inner;
-
-      const to = new Vertex();
-      to.name = `[${gap.name}^${gap.next}]`;
-      to.pos = gap.to;
-
-      corners.push(inner, to);
-      vertices.add(inner).add(to);
-    }
-
     const innerLoop: HalfEdge[] = [];
     const outerLoop: HalfEdge[] = [];
 
-    corners.forEach((vertex, i) => {
-      const prev = corners.at(i - 1);
-      const [he1, he2] = makeEdge(star, outerspace, vertex, prev);
-      innerLoop.push(he1);
-      outerLoop.unshift(he2);
-      vertex.firstHalfEdgeOut = he2;
+    gaps.forEach((gap, i) => {
+      const from = new Vertex();
+      from.name = `[${gaps.at(i-1).name}^${gap.name}]`;
+      from.pos = gap.fromPos;
+
+      const inner = new Vertex();
+      inner.name = gap.name;
+      inner.pos = gap.innerPos;
+
+      gap.from = from;
+      gap.inner = inner;
+
+      vertices.add(from).add(inner);
+      verticesByName[from.name] = from;
+      verticesByName[inner.name] = inner;
     });
+
+    gaps.forEach((gap, i) => {
+      const {from, inner} = gap;
+      const to = gaps[(i + 1) % gaps.length].from;
+
+      const [he1, he2] = makeEdge(star, outerspace, inner, from);
+      const [he3, he4] = makeEdge(star, outerspace, to, inner);
+      he2.peer = he4;
+      he4.peer = he2;
+
+      innerLoop.push(he1, he3);
+      outerLoop.unshift(he4, he2);
+
+      from.firstHalfEdgeOut = he1;
+      inner.firstHalfEdgeOut = he2;
+    });
+
     chainHEs(innerLoop.at(-1), ...innerLoop);
     chainHEs(outerLoop.at(-1), ...outerLoop);
-
-    // TODO find a cleaner way to link peers:
-    for (let i = 0; i < outerLoop.length; i += 2) {
-      const he1 = outerLoop[i];
-      const he2 = outerLoop[(i+1) % outerLoop.length];
-      he1.peer = he2; he2.peer = he1;
-    }
 
     star.firstHalfEdge = innerLoop[0];
     outerspace.firstHalfEdge = outerLoop[0];
@@ -435,6 +417,7 @@ class Mesh {
   }
 
   splitFace(face: Face, p: Vertex, q: Vertex) {
+    log("---------------------------------------------------------");
     log(`splitting ${p.name}-${q.name}`)
     const newFace = new Face();
     newFace.name = `split(${p.name}-${q.name})`;
@@ -453,7 +436,7 @@ class Mesh {
     }
 
     this.loops.add(newFace);
-    mesh.checkMesh();
+    this.checkMesh();
 
     const beyond = new Set<Vertex>();
     function recur(v: Vertex) {
@@ -462,117 +445,119 @@ class Mesh {
       [...v.neighbors()].forEach(recur);
     }
     recur(he2.next.to);
-    log(`beyond ${p} and ${q}: {${[...beyond].join(", ")}}`)
+    log(`beyond ${p} and ${q}: {${[...beyond].join(", ")}}`);
+    this.logMesh();
     return beyond;
   }
-}
 
-const intersect3Spheres = (
-  S1: Multivector<never>, S2: Multivector<never>, S3: Multivector<never>
-) => splitPointPair(R.regressiveProduct(S1, S2, S3));
-
-// TODO get rid of this global state?
-let mesh: Mesh;
-let verticesByName: Record<string, Vertex>;
-
-function fold(folding: Gap[]) {
-  log("=".repeat(160));
-  const {loops, vertices} = mesh;
-  const foldingVertices = folding.map(gap => verticesByName[gap.name]);
-  const matches = [...loops].filter(loop => {
-    if (!(loop instanceof Face)) return false;
-    const faceVertices = [...loop.vertices()];
-    return foldingVertices.every(v => faceVertices.includes(v));
-  });
-  if (matches.length !== 1) {
-    console.error(
-      `Expected 1 matching face for folding ${
-        folding.map(gap => gap.name).join(" ")
-      } but found ${matches.length}`,
-    );
-  }
-  const [face] = matches;
-  const [p, q, r] = foldingVertices;
-  log(`bend ${face} along new edges ${p} - ${q} and ${q} - ${r}`)
-
-  log("---------------------------------------------------------");
-  const beyond_pq = mesh.splitFace(face, p, q);
-  mesh.logMesh();
-
-  log("---------------------------------------------------------");
-  const beyond_qr = mesh.splitFace(face, q, r);
-  mesh.logMesh();
-
-  for (const vtx of beyond_pq) {
-    if (beyond_qr.has(vtx)) {
-      fail("overlap: " + vtx);
-    }
-  }
-
-  const tip1 = [...q.halfEdgesOut()].find(he => he.loop instanceof Boundary).to;
-  const tip2 = [...q.halfEdgesIn ()].find(he => he.loop instanceof Boundary).from;
-
-  log("points:", [p, tip1, q, tip2, r].map(point =>
-    `\n  ${point.name}: ${point.pos.toString()}`
-  ).join(""));
-  log("radii:", [
-    distance(p.pos, tip1.pos),
-    distance(q.pos, tip1.pos),
-    distance(q.pos, tip2.pos),
-    distance(r.pos, tip2.pos),
-  ].map(d => "\n  " + d.toFixed(5)).join(""))
-  const [inters1, inters2] = intersect3Spheres(
-    makeSphere(baseToRepr(p.pos), baseToRepr(tip1.pos)),
-    makeSphere(baseToRepr(q.pos), baseToRepr(tip1 /* or tip2 */.pos)),
-    makeSphere(baseToRepr(r.pos), baseToRepr(tip2.pos)),
-  ).map(reprToBase);
-  log("intersections:");
-  for (const inters of [inters1, inters2]) {
-    log("  "+ inters);
-  }
-  log("distances:");
-  for (const vtx of [p, q, r]) {
-    [inters1, inters2].forEach((inters, i) =>
-      log(`  ${vtx.name} - inters${i+1}: ${distance(vtx.pos, inters).toFixed(5)}`)
-    );
-  }
-
-  for (const {beyond, tip, other} of [
-    {beyond: beyond_pq, tip: tip1, other: p},
-    {beyond: beyond_qr, tip: tip2, other: r},
-  ]) {
+  rotateVertices(
+    axisPoint1: MV, axisPoint2: MV,
+    from: MV, to: MV,
+    beyond: Iterable<Vertex>,
+  ) {
     // TODO use CGA?
-    const pivot = projectPointToLine(tip.pos, q.pos, other.pos);
-    assert(closeTo0(B.minus(projectPointToLine(inters1, q.pos, other.pos), pivot)));
-    const dir1 = B.normalize(B.minus(inters1, pivot));
-    const dir2 = B.normalize(B.minus(tip.pos, pivot));
+    const pivot = projectPointToLine(from, axisPoint1, axisPoint2);
+    assert(closeTo0(B.minus(projectPointToLine(to, axisPoint1, axisPoint2), pivot)));
+    const dir1 = B.normalize(B.minus(to, pivot));
+    const dir2 = B.normalize(B.minus(from, pivot));
     const dirMid = B.normalize(B.plus(dir1, dir2));
     const rot = B.geometricProduct(dir1, dirMid);
-    const transform = (point: Multivector<never>) =>
+    const transform = (point: MV) =>
       B.plus(B.sandwich(rot)(B.minus(point, pivot)), pivot);
-    const angle = B.getAngle(B.minus(tip.pos, pivot), B.minus(inters1, pivot));
-    log(`rotation around: ${q}@${q.pos} - ${other}@${other.pos}`,
+    const angle = B.getAngle(B.minus(from, pivot), B.minus(to, pivot));
+    log(`rotation around: ${axisPoint1}@${axisPoint1} - ${axisPoint2}@${axisPoint2}`,
       `\n  pivot: ${pivot}`,
-      `\n  axis: ${B.minus(other.pos, q.pos)}`,
+      `\n  axis: ${B.minus(axisPoint2, axisPoint1)}`,
       `\n  angle: ${(angle * 180 / Math.PI).toFixed(5)}° = ${angle}`,
     );
     for (const vtx of beyond) {
-      log(`  rotate ${vtx} from ${vtx.pos} to ${transform(vtx.pos)}`);
+      log(`  - rotate ${vtx} from ${vtx.pos} to ${transform(vtx.pos)}`);
       vtx.pos = transform(vtx.pos);
     }
   }
 
-  log("ROTATED")
-  mesh.checkMesh();
-  mesh.logMesh();
-
-  {
-    // Merge the two vertices tip1 and tip2 to tip := [tip1|tip2]
-    // and the two edges tip1-q and tip2-q to tip-q.
-
-    if (distance(tip1.pos, tip2.pos) > 1e-8) {
-      fail(`tips not properly aligned: ${tip1}@${tip1.pos} !== ${tip2}@${tip2.pos}`);
+  bend2(folding: string[]) {
+    if (folding.length !== 3) fail("bend2 expects 3 args");
+    const {loops, verticesByName} = this;
+    const foldingVertices = folding.map(name => verticesByName[name]);
+    const matches = [...loops].filter(loop => {
+      if (!(loop instanceof Face)) return false;
+      const faceVertices = [...loop.vertices()];
+      return foldingVertices.every(v => faceVertices.includes(v));
+    });
+    if (matches.length !== 1) {
+      console.error(
+        `Expected 1 matching face for folding ${
+          folding.join(" ")
+        } but found ${matches.length}`,
+      );
     }
+    const [face] = matches;
+    const [p, q, r] = foldingVertices;
+    log(`bend ${face} along new edges ${p} - ${q} and ${q} - ${r}`)
+
+    const beyond_pq = this.splitFace(face, p, q);
+    const beyond_qr = this.splitFace(face, q, r);
+    log("---------------------------------------------------------");
+
+    for (const vtx of beyond_pq) {
+      if (beyond_qr.has(vtx)) {
+        fail("overlap: " + vtx);
+      }
+    }
+
+    const tip1 = [...q.halfEdgesOut()].find(he => he.loop instanceof Boundary).to;
+    const tip2 = [...q.halfEdgesIn ()].find(he => he.loop instanceof Boundary).from;
+
+    log("points:", [p, tip1, q, tip2, r].map(point =>
+      `\n  ${point.name}: ${point.pos.toString()}`
+    ).join(""));
+    log("radii:", [
+      distance(p.pos, tip1.pos),
+      distance(q.pos, tip1.pos),
+      distance(q.pos, tip2.pos),
+      distance(r.pos, tip2.pos),
+    ].map(d => "\n  " + d.toFixed(5)).join(""))
+    const [inters1, inters2] = intersect3Spheres(
+      makeSphere(baseToRepr(p.pos), baseToRepr(tip1.pos)),
+      makeSphere(baseToRepr(q.pos), baseToRepr(tip1 /* or tip2 */.pos)),
+      makeSphere(baseToRepr(r.pos), baseToRepr(tip2.pos)),
+    ).map(reprToBase);
+    log("intersections:");
+    for (const inters of [inters1, inters2]) {
+      log("  "+ inters);
+    }
+    log("distances:");
+    for (const vtx of [p, q, r]) {
+      [inters1, inters2].forEach((inters, i) =>
+        log(`  ${vtx.name} - inters${i+1}: ${distance(vtx.pos, inters).toFixed(5)}`)
+      );
+    }
+
+    this.rotateVertices(p.pos, q.pos, tip1.pos, inters1, beyond_pq);
+    this.rotateVertices(q.pos, r.pos, tip2.pos, inters1, beyond_qr);
+    if (distance(tip1.pos, tip2.pos) > 1e-8) {
+      fail(`tips ${tip1} and ${tip2} not properly aligned: ${tip1.pos} !== ${tip2.pos}`);
+    }
+
+    this.checkMesh();
+    this.logMesh();
+
+    const spannedVolume = B.wedgeProduct(
+      B.minus(p   .pos, q.pos),
+      B.minus(tip1.pos, q.pos),
+      B.minus(r   .pos, q.pos),
+    );
+    log("vol:", spannedVolume);
+    this.mergeEdges(tip1, q, tip2, closeTo0(spannedVolume));
+  }
+
+  /**
+   * Merge the two vertices tip1 and tip2 to tip := [tip1|tip2]
+   * and the two edges tip1-q and tip2-q to tip-q.
+  */
+  mergeEdges(tip1: Vertex, q: Vertex, tip2: Vertex, mergeFaces: boolean) {
+    const {loops, vertices} = this;
     const he_tip1_q = findHE(tip1, q), he_q_tip1 = he_tip1_q.twin;
     const he_q_tip2 = findHE(q, tip2), he_tip2_q = he_q_tip2.twin;
     const boundary = he_q_tip1.loop;
@@ -605,15 +590,9 @@ function fold(folding: Gap[]) {
     vertices.add(tip);
 
     log(`aligned tips \n  ${tip1}@${tip1.pos} and \n  ${tip2}@${tip1.pos} into \n  ${tip}@${tip.pos}`)
-    mesh.checkMesh();
+    this.checkMesh();
 
-    const spannedVolume = B.wedgeProduct(
-      B.minus(p  .pos, q.pos),
-      B.minus(tip.pos, q.pos),
-      B.minus(r  .pos, q.pos),
-    );
-    log("vol:", spannedVolume);
-    if (closeTo0(spannedVolume)) {
+    if (mergeFaces) {
       log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q.loop}`);
       chainHEs(he_q_tip2.prev, he_tip1_q.next);
       chainHEs(he_tip1_q.prev, he_q_tip2.next);
@@ -633,6 +612,9 @@ function fold(folding: Gap[]) {
   }
 }
 
+const intersect3Spheres = (S1: MV, S2: MV, S3: MV) =>
+  splitPointPair(R.regressiveProduct(S1, S2, S3));
+
 function assert(test: boolean) {
   if (!test) {
     debugger;
@@ -641,19 +623,16 @@ function assert(test: boolean) {
 }
 
 /** Project the first point to the line given by the other two points. */
-function projectPointToLine(
-  p: Multivector<never>,
-  q: Multivector<never>,
-  r: Multivector<never>,
-) {
+function projectPointToLine(p: MV, q: MV, r: MV) {
   const qp = B.minus(p, q)
   const qr = B.minus(r, q);
-  const qf = B.scale(B.scalarProduct(qr, qp) / B.scalarProduct(qr, qr), qr)
-  return B.plus(q, qf);
+  const factor =
+    B.scalarProduct(qr, qp) /
+    B.scalarProduct(qr, qr);
+  return B.plus(q, B.scale(factor, qr));
 }
 
-// Quick test for projectPointToLine(...):
-if (false) {
+function test_projectPointToLine() {
   const p = B.vec([8,1,2]);
   const q = B.vec([1,4,-2]);
   const r = B.vec([3,1,7]);
@@ -670,26 +649,31 @@ if (false) {
   )));
   log(`test for projectPointToLine(...) succeeded: ${foot}`);
 }
+// test_projectPointToLine();
 
+const cmdNames = ["bend2", "reattach"];
 
 function main() {
+  const mesh = new Mesh(getGaps(polygonDef));
+  mesh.logMesh();
+
+  for (const {cmd, args} of parseActions(actionsDef)) {
+    log("=".repeat(160));
+    log(cmd, ...args);
+    if (!cmdNames.includes(cmd)) fail(`Unknown command "${cmd}"`);
+    mesh[cmd](args);
+  }
+
+  log("REACHED THE END");
+  background.value = "#efe";
+}
+
+if (false) {
+  main();
+} else {
   try {
-    log(theInstructions);
-
-    const {gapsArray, gapsByName, foldings} = parseInstructions(theInstructions);
-    // emit(JSON.stringify(parseInstructions(theInstructions), null, 2));
-
-    mesh = new Mesh(gapsArray);
-    mesh.logMesh();
-
-    verticesByName = Object.fromEntries([...mesh.vertices].map(v => [v.name, v]))
-
-    for (const folding of foldings) {
-      fold(folding);
-    }
+    main();
   } catch (e) {
     log(`CAUGHT EXCEPTION: ${e}`);
   }
 }
-
-main();
