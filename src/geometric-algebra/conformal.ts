@@ -94,6 +94,3 @@ export function splitPointPair(pp: Multivector<never>) {
     R.geometricProduct(R.plus(pp, R.mv({1: sgn * root})), invDenominator)
   );
 }
-
-export const distance = (a: Multivector<never>, b: Multivector<never>) =>
-  B.norm(B.minus(a, b));

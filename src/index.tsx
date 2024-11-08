@@ -2,18 +2,17 @@ import { render } from 'preact';
 import { batch, signal } from '@preact/signals';
 
 import './style.css';
-import { B, baseToRepr, distance, embedInR, makeSphere, R, reprToBase, splitPointPair } from './geometric-algebra/conformal';
-import { fail, Multivector } from './geometric-algebra/Algebra';
-
-type MV = Multivector<never>;
+import { assert, fail, log, setLogger } from './utils';
+import { closeTo0, distance, E3, intersect3Spheres, MV, rotatePoints, rotXY60 } from './geom-utils';
+import { Boundary, chainHEs, Face, findHE, HalfEdge, Loop, makeEdge, Vertex } from './mesh-components';
 
 const output = signal("");
 
 const background = signal("#fee");
 
-function log(...args: any[]) {
+setLogger(function logToOutput(...args: any[]) {
   output.value += args.join(" ") + "\n";
-}
+});
 
 export function App() {
   return (
@@ -49,22 +48,19 @@ bend2 d h i
 const r3 = Math.sqrt(3), r3half = r3 / 2;
 
 const steps = {
-  "12": B.vec([ 0 * r3half,  2 / 2, 0]),
-   "1": B.vec([ 1 * r3half,  3 / 2, 0]),
-   "2": B.vec([ 1 * r3half,  1 / 2, 0]),
-   "3": B.vec([ 2 * r3half,  0 / 2, 0]),
-   "4": B.vec([ 1 * r3half, -1 / 2, 0]),
-   "5": B.vec([ 1 * r3half, -3 / 2, 0]),
-   "6": B.vec([ 0 * r3half, -2 / 2, 0]),
-   "7": B.vec([-1 * r3half, -3 / 2, 0]),
-   "8": B.vec([-1 * r3half, -1 / 2, 0]),
-   "9": B.vec([-2 * r3half,  0 / 2, 0]),
-  "10": B.vec([-1 * r3half,  1 / 2, 0]),
-  "11": B.vec([-1 * r3half,  3 / 2, 0]),
+  "12": E3.vec([ 0 * r3half,  2 / 2, 0]),
+   "1": E3.vec([ 1 * r3half,  3 / 2, 0]),
+   "2": E3.vec([ 1 * r3half,  1 / 2, 0]),
+   "3": E3.vec([ 2 * r3half,  0 / 2, 0]),
+   "4": E3.vec([ 1 * r3half, -1 / 2, 0]),
+   "5": E3.vec([ 1 * r3half, -3 / 2, 0]),
+   "6": E3.vec([ 0 * r3half, -2 / 2, 0]),
+   "7": E3.vec([-1 * r3half, -3 / 2, 0]),
+   "8": E3.vec([-1 * r3half, -1 / 2, 0]),
+   "9": E3.vec([-2 * r3half,  0 / 2, 0]),
+  "10": E3.vec([-1 * r3half,  1 / 2, 0]),
+  "11": E3.vec([-1 * r3half,  3 / 2, 0]),
 };
-
-const rotorXY60  = B.mv({1: r3half, xy: -.5});
-const rotXY60 = B.sandwich(rotorXY60);
 
 /**
  * One of the cut-out triangles (green in the Thurston paper).
@@ -83,17 +79,19 @@ type Gap = {
 };
 
 function getGaps(def: string): Gap[] {
-  let currentPos = B.vec([0, 0, 0]);
-  return def.trim().split(/\r?\n/).map(line => {
-    const [name, ...moves] = line.trim().split(/\s+/);
-    const fromPos = currentPos;
-    for (const move of moves) {
-      currentPos = B.plus(currentPos, steps[move] ?? fail(`unknown step: ${move}`))
-    }
-    const innerPos = B.plus(fromPos, rotXY60(B.minus(currentPos, fromPos)));
-    log(`${name}: from ${fromPos} inner ${innerPos}`);
-    return {name, fromPos, innerPos}
-  });
+  let currentPos = E3.vec([0, 0, 0]);
+  return def.trim().split(/\r?\n/)
+    .filter(line => !line.startsWith("#"))
+    .map(line => {
+      const [name, ...moves] = line.trim().split(/\s+/);
+      const fromPos = currentPos;
+      for (const move of moves) {
+        currentPos = E3.plus(currentPos, steps[move] ?? fail(`unknown step: ${move}`))
+      }
+      const innerPos = E3.plus(fromPos, rotXY60(E3.minus(currentPos, fromPos)));
+      log(`${name}: from ${fromPos} inner ${innerPos}`);
+      return {name, fromPos, innerPos}
+    });
 }
 
 const parseActions = (def: string) =>
@@ -103,151 +101,6 @@ const parseActions = (def: string) =>
     const [cmd, ...args] = line.trim().split(/\s+/);
     return {cmd, args}
   });
-
-const closeTo0 = (mv: MV) =>
-  [...mv].every(([, val]) => Math.abs(val) < 1e-8);
-
-abstract class WithId {
-  static count = 0;
-  id: string;
-  constructor() {
-    this.id = "#" + WithId.count++;
-  }
-}
-
-class HalfEdge extends WithId {
-  loop: Loop;
-  /**
-   * A symmetric relation for boundary half edges.
-   * Two half edges are peers if they are expected to be glued together in the
-   * final polyhedron.
-   * The peer relation is (at least for now) only used for redundancy.
-   */
-  peer: HalfEdge | null = null;
-
-  prev: HalfEdge;
-  twin: HalfEdge;
-  next: HalfEdge;
-
-  to: Vertex;
-  get from() { return this.twin.to; }
-
-  toString() { return "he" + this.id; }
-}
-
-function findHE(from: Vertex, to: Vertex) {
-  const results: HalfEdge[] = [];
-  for (const he of from.halfEdgesOut()) {
-    if (he.to === to) {
-      results.push(he);
-    }
-  }
-  if (results.length !== 1) fail(`Found ${results.length} half-edges from ${from.name} to ${to.name}.`);
-  return results[0];
-}
-
-function makeEdge(f1: Loop, f2: Loop, to1: Vertex, to2: Vertex) {
-  const he1 = new HalfEdge(), he2 = new HalfEdge();
-  he1.twin = he2; he2.twin = he1;
-  he1.loop = f1 ; he2.loop = f2;
-  he1.to   = to1; he2.to   = to2;
-  log(`new edge ${he1}|${he2} connecting ${to2} - ${to1} separating ${f1} | ${f2}`);
-  return [he1, he2];
-}
-
-function chainHEs(first: HalfEdge, ...rest: HalfEdge[]) {
-  let prev = first;
-  for (let next of rest) {
-    prev.next = next;
-    next.prev = prev;
-    prev = next;  
-  }
-}
-
-class Vertex extends WithId {
-  firstHalfEdgeOut: HalfEdge;
-  name: string;
-  pos: MV;
-
-  *halfEdgesOut() {
-    let he = this.firstHalfEdgeOut;
-    let count = 1;
-    do {
-      yield he;
-      if (++count > 50) {
-        log(`too many half edges around ${this}`);
-        for (let i = 1, he = this.firstHalfEdgeOut; i < 50; i++, he = he.twin.next) {
-          log(`  ${he}  ${he.loop}  ${he.to}`);
-        }
-        fail(`too many half edges around ${this}`);
-      }
-      he = he.twin.next;
-    } while (he !== this.firstHalfEdgeOut);
-  }
-
-  *halfEdgesIn() {
-    for (const he of this.halfEdgesOut()) {
-      yield he.twin;
-    }
-  }
-
-  *loops() {
-    for (const he of this.halfEdgesOut()) {
-      yield he.loop;
-    }
-  }
-
-  *neighbors() {
-    for (const he of this.halfEdgesOut()) {
-      yield he.to;
-    }
-  }
-
-  toString() {
-    return `v${this.id}/${this.name}`;
-  }
-}
-
-abstract class Loop extends WithId {
-  name: string;
-  firstHalfEdge: HalfEdge;
-
-  *halfEdges() {
-    let he = this.firstHalfEdge;
-    let count = 1;
-    do {
-      yield he;
-      if (++count > 50) {
-        log(`too many half edges around ${this}`);
-        for (let i = 1, he = this.firstHalfEdge; i < 50; i++, he = he.next) {
-          log(`  ${he}  ${he.loop}  ${he.to}`);
-        }
-        fail(`too many half edges around ${this}`);
-      }
-      he = he.next;
-    } while (he !== this.firstHalfEdge);
-  }
-
-  *vertices() {
-    for (const he of this.halfEdges()) {
-      yield he.to;
-    }
-  }
-
-  *neighbors() {
-    for (const he of this.halfEdges()) {
-      yield he.twin.loop;
-    }
-  }
-}
-
-class Face extends Loop {
-  toString() { return `f${this.id}/${this.name}`; }
-}
-
-class Boundary extends Loop {
-  toString() { return `b${this.id}/${this.name}`; }
-}
 
 class Mesh {
   loops = new Set<Loop>();
@@ -362,10 +215,10 @@ class Mesh {
           const v1 = array[(i + 1) % array.length];
           const v2 = array[(i + 2) % array.length];
           const v3 = array[(i + 3) % array.length];
-          const vol = B.wedgeProduct(
-            B.minus(v1.pos, v.pos),
-            B.minus(v2.pos, v.pos),
-            B.minus(v3.pos, v.pos),
+          const vol = E3.wedgeProduct(
+            E3.minus(v1.pos, v.pos),
+            E3.minus(v2.pos, v.pos),
+            E3.minus(v3.pos, v.pos),
           );
           if (!closeTo0(vol)) {
             fail(`face ${loop} not flat (${vol}): ${
@@ -380,8 +233,8 @@ class Mesh {
         for (const he of loop.halfEdges()) {
           assert(he.peer.peer === he);
           assert(Math.abs(
-            B.dist(he.from.pos, he.to.pos) -
-            B.dist(he.peer.from.pos, he.peer.to.pos),
+            E3.dist(he.from.pos, he.to.pos) -
+            E3.dist(he.peer.from.pos, he.peer.to.pos),
           ) < 1e-8);
         }
       }
@@ -450,32 +303,6 @@ class Mesh {
     return beyond;
   }
 
-  rotateVertices(
-    axisPoint1: MV, axisPoint2: MV,
-    from: MV, to: MV,
-    beyond: Iterable<Vertex>,
-  ) {
-    // TODO use CGA?
-    const pivot = projectPointToLine(from, axisPoint1, axisPoint2);
-    assert(closeTo0(B.minus(projectPointToLine(to, axisPoint1, axisPoint2), pivot)));
-    const dir1 = B.normalize(B.minus(to, pivot));
-    const dir2 = B.normalize(B.minus(from, pivot));
-    const dirMid = B.normalize(B.plus(dir1, dir2));
-    const rot = B.geometricProduct(dir1, dirMid);
-    const transform = (point: MV) =>
-      B.plus(B.sandwich(rot)(B.minus(point, pivot)), pivot);
-    const angle = B.getAngle(B.minus(from, pivot), B.minus(to, pivot));
-    log(`rotation around: ${axisPoint1}@${axisPoint1} - ${axisPoint2}@${axisPoint2}`,
-      `\n  pivot: ${pivot}`,
-      `\n  axis: ${B.minus(axisPoint2, axisPoint1)}`,
-      `\n  angle: ${(angle * 180 / Math.PI).toFixed(5)}° = ${angle}`,
-    );
-    for (const vtx of beyond) {
-      log(`  - rotate ${vtx} from ${vtx.pos} to ${transform(vtx.pos)}`);
-      vtx.pos = transform(vtx.pos);
-    }
-  }
-
   bend2(folding: string[]) {
     if (folding.length !== 3) fail("bend2 expects 3 args");
     const {loops, verticesByName} = this;
@@ -517,25 +344,15 @@ class Mesh {
       distance(q.pos, tip1.pos),
       distance(q.pos, tip2.pos),
       distance(r.pos, tip2.pos),
-    ].map(d => "\n  " + d.toFixed(5)).join(""))
-    const [inters1, inters2] = intersect3Spheres(
-      makeSphere(baseToRepr(p.pos), baseToRepr(tip1.pos)),
-      makeSphere(baseToRepr(q.pos), baseToRepr(tip1 /* or tip2 */.pos)),
-      makeSphere(baseToRepr(r.pos), baseToRepr(tip2.pos)),
-    ).map(reprToBase);
-    log("intersections:");
-    for (const inters of [inters1, inters2]) {
-      log("  "+ inters);
-    }
-    log("distances:");
-    for (const vtx of [p, q, r]) {
-      [inters1, inters2].forEach((inters, i) =>
-        log(`  ${vtx.name} - inters${i+1}: ${distance(vtx.pos, inters).toFixed(5)}`)
-      );
-    }
+    ].map(d => "\n  " + d.toFixed(5)).join(""));
+    const [inters1 /* , inters2 */] = intersect3Spheres(
+      p.pos, tip1.pos,
+      q.pos, tip1 /* or tip2 */.pos,
+      r.pos, tip2.pos,
+    );
 
-    this.rotateVertices(p.pos, q.pos, tip1.pos, inters1, beyond_pq);
-    this.rotateVertices(q.pos, r.pos, tip2.pos, inters1, beyond_qr);
+    rotatePoints(p.pos, q.pos, tip1.pos, inters1, beyond_pq);
+    rotatePoints(q.pos, r.pos, tip2.pos, inters1, beyond_qr);
     if (distance(tip1.pos, tip2.pos) > 1e-8) {
       fail(`tips ${tip1} and ${tip2} not properly aligned: ${tip1.pos} !== ${tip2.pos}`);
     }
@@ -543,10 +360,10 @@ class Mesh {
     this.checkMesh();
     this.logMesh();
 
-    const spannedVolume = B.wedgeProduct(
-      B.minus(p   .pos, q.pos),
-      B.minus(tip1.pos, q.pos),
-      B.minus(r   .pos, q.pos),
+    const spannedVolume = E3.wedgeProduct(
+      E3.minus(p   .pos, q.pos),
+      E3.minus(tip1.pos, q.pos),
+      E3.minus(r   .pos, q.pos),
     );
     log("vol:", spannedVolume);
     this.mergeEdges(tip1, q, tip2, closeTo0(spannedVolume));
@@ -611,45 +428,6 @@ class Mesh {
     }
   }
 }
-
-const intersect3Spheres = (S1: MV, S2: MV, S3: MV) =>
-  splitPointPair(R.regressiveProduct(S1, S2, S3));
-
-function assert(test: boolean) {
-  if (!test) {
-    debugger;
-    fail("assertion failed");
-  }
-}
-
-/** Project the first point to the line given by the other two points. */
-function projectPointToLine(p: MV, q: MV, r: MV) {
-  const qp = B.minus(p, q)
-  const qr = B.minus(r, q);
-  const factor =
-    B.scalarProduct(qr, qp) /
-    B.scalarProduct(qr, qr);
-  return B.plus(q, B.scale(factor, qr));
-}
-
-function test_projectPointToLine() {
-  const p = B.vec([8,1,2]);
-  const q = B.vec([1,4,-2]);
-  const r = B.vec([3,1,7]);
-  const foot = projectPointToLine(p, q, r);
-  // Vectors foot-p and r-q are perpendicular:
-  assert(Math.abs(B.scalarProduct(
-    B.minus(foot, p),
-    B.minus(r, q),
-  )) < 1e-8);
-  // Vectors q-foot and r-foot are collinear:
-  assert(closeTo0(B.wedgeProduct(
-    B.minus(q, foot),
-    B.minus(r, foot),
-  )));
-  log(`test for projectPointToLine(...) succeeded: ${foot}`);
-}
-// test_projectPointToLine();
 
 const cmdNames = ["bend2", "reattach"];
 
