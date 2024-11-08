@@ -217,6 +217,8 @@ export class Multivector<T> implements Iterable<[number, Scalar<T>]> {
       }).join(", ")
     }}`;
   }
+
+  toJSON() { return this.toObject(); }
 }
 
 /** For each 1 bit in the bitmap, invoke the callback with the bit position. */
