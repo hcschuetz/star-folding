@@ -147,6 +147,7 @@ abstract class WithId {
 
 class HalfEdge extends WithId {
   loop: Loop;
+  peer: HalfEdge | null = null; // non-null if loop is a boundary
 
   prev: HalfEdge;
   twin: HalfEdge;
@@ -312,6 +313,13 @@ class Mesh {
     chainHEs(innerLoop.at(-1), ...innerLoop);
     chainHEs(outerLoop.at(-1), ...outerLoop);
 
+    // TODO find a cleaner way to link peers:
+    for (let i = 0; i < outerLoop.length; i += 2) {
+      const he1 = outerLoop[i];
+      const he2 = outerLoop[(i+1) % outerLoop.length];
+      he1.peer = he2; he2.peer = he1;
+    }
+
     star.firstHalfEdge = innerLoop[0];
     outerspace.firstHalfEdge = outerLoop[0];
     this.checkMesh();
@@ -382,7 +390,18 @@ class Mesh {
               [v, v1, v2, v3].flatMap(vtx => [vtx, vtx.pos]).join(", ")
             }`);
           }
-        })
+        });
+        for (const he of loop.halfEdges()) {
+          assert(he.peer === null);
+        }
+      } else if (loop instanceof Boundary) {
+        for (const he of loop.halfEdges()) {
+          assert(he.peer.peer === he);
+          assert(Math.abs(
+            B.dist(he.from.pos, he.to.pos) -
+            B.dist(he.peer.from.pos, he.peer.to.pos),
+          ) < 1e-8);
+        }
       }
     }
     for (const vertex of vertices) {
