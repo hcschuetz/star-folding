@@ -80,6 +80,35 @@ type Loop = LoopG<VData, LData, EData>;
 type Vertex = VertexG<VData, LData, EData>;
 type HalfEdge = HalfEdgeG<VData, LData, EData>;
 
+function isBetweenCoplanarLoops(he: HalfEdge): boolean {
+  // Search for parallelepipeds with non-zero volume spanned by 4 vertices
+  // from `he`'s adjacent loop and `he.twin`'s adjacent loop.
+  // The two loops are coplanar iff no such parallelepiped exists.
+
+  const vertices =
+    [...new Set<Vertex>([...he.loop.vertices(), ...he.twin.loop.vertices()])];
+  const nVertices = vertices.length;
+
+  for (let i = 0; i < nVertices - 3; i++) {
+    const base = vertices[i].d.pos;
+    for (let j = i + 1; j < nVertices - 2; j++) {
+      const len_ij = E3.minus(vertices[j].d.pos, base);
+      if (closeTo0(len_ij)) break; // (*)
+      for (let k = j + 1; k < nVertices - 1; k++) {
+        const area_ijk = E3.wedgeProduct(len_ij, E3.minus(vertices[k].d.pos, base));
+        if (closeTo0(area_ijk)) break; // (*)
+        for (let l = k + 1; l < nVertices; l++) {
+          const vol_ijkl = E3.wedgeProduct(area_ijk, E3.minus(vertices[l].d.pos, base));
+          if (closeTo0(vol_ijkl)) break;
+          return false;
+        }
+      }
+    }
+  }
+  // (*) Are these checks worthwhile?  They are not needed for correctness.
+  return true;
+}
+
 function setPeers(he0: HalfEdge, he1: HalfEdge) {
   he0.d = {peer: he1};
   he1.d = {peer: he0};
@@ -313,20 +342,16 @@ class Mesh extends MeshG<VData, LData, EData> {
       fail(`tips ${tip1} and ${tip2} not properly aligned: ${tip1.d.pos} !== ${tip2.d.pos}`);
     }
 
-    const spannedVolume = E3.wedgeProduct(
-      E3.minus(p   .d.pos, q.d.pos),
-      E3.minus(tip1.d.pos, q.d.pos),
-      E3.minus(r   .d.pos, q.d.pos),
-    );
-    log("vol:", spannedVolume);
+    this.mergeEdges(tip1, q, tip2);
+    this.logMesh();
+    this.checkWithData();
 
-    if (closeTo0(spannedVolume)) {
+    if (isBetweenCoplanarLoops(findHE(tip1, q))) {
       // TODO create a test case for this situation
       log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q.loop}`);
       this.dropEdge(he_tip1_q); // or he_q_tip2?
       log(`merged faces ${he_q_tip2.loop} into ${he_tip1_q.loop}`);
     }
-    this.mergeEdges(tip1, q, tip2);
   }
 
   /**
@@ -344,7 +369,7 @@ class Mesh extends MeshG<VData, LData, EData> {
     // This would avoid creating a temporary edge and a temporary loop.
     const tmpEdge = this.splitLoop(he_q_tip1, he_tip2_q.prev, {create: "left"});
     this.contractEdge(tmpEdge[0]);
-    this.dropEdge(he_tip1_q.twin);
+    this.dropEdge(he_q_tip1);
     tip1.name = `[${tip1.name}|${tip2.name}]`
 
     this.checkWithData();
