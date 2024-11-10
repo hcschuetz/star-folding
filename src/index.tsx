@@ -269,8 +269,12 @@ class Mesh extends MeshG<VData, LData, EData> {
     const [p, q, r] = argVertices;
     log(`bend ${face} along new edges ${p} - ${q} and ${q} - ${r}`)
 
-    const tip1 = [...q.halfEdgesOut()].find(he => !he.loop.d.isFace).to;
-    const tip2 = [...q.halfEdgesIn ()].find(he => !he.loop.d.isFace).from;
+    const he_q_tip1 = [...q.halfEdgesOut()].find(he => !he.loop.d.isFace);
+    const he_tip1_q = he_q_tip1.twin;
+    const tip1 = he_q_tip1.to;
+    const he_tip2_q = [...q.halfEdgesIn ()].find(he => !he.loop.d.isFace);
+    const he_q_tip2 = he_tip2_q.twin;
+    const tip2 = he_tip2_q.from;
 
     log("points:", [p, tip1, q, tip2, r].map(point =>
       `\n  ${point.name}: ${point.d.pos.toString()}`
@@ -315,35 +319,35 @@ class Mesh extends MeshG<VData, LData, EData> {
       E3.minus(r   .d.pos, q.d.pos),
     );
     log("vol:", spannedVolume);
-    this.mergeEdges(tip1, q, tip2, closeTo0(spannedVolume));
+
+    if (closeTo0(spannedVolume)) {
+      // TODO create a test case for this situation
+      log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q.loop}`);
+      this.dropEdge(he_tip1_q); // or he_q_tip2?
+      log(`merged faces ${he_q_tip2.loop} into ${he_tip1_q.loop}`);
+    }
+    this.mergeEdges(tip1, q, tip2);
   }
 
   /**
    * Merge the two vertices tip1 and tip2 to tip := [tip1|tip2]
    * and the two edges tip1-q and tip2-q to tip-q.
   */
-  mergeEdges(tip1: Vertex, q: Vertex, tip2: Vertex, mergeFaces: boolean) {
-    const {vertices} = this;
+  mergeEdges(tip1: Vertex, q: Vertex, tip2: Vertex) {
     const he_tip1_q = findHE(tip1, q), he_q_tip1 = he_tip1_q.twin;
     const he_q_tip2 = findHE(q, tip2), he_tip2_q = he_q_tip2.twin;
     assertPeers(he_q_tip1, he_tip2_q);
     noPeers(he_q_tip1, he_tip2_q);
     log(`Half edges ${he_tip2_q} and ${he_q_tip1} should become unreachable`);
 
-    // TODO use higher-level Mesh methods.
-
+    // TODO Let MeshG provide a method combining splitLoop and contractEdge?
+    // This would avoid creating a temporary edge and a temporary loop.
     const tmpEdge = this.splitLoop(he_q_tip1, he_tip2_q.prev, {create: "left"});
-    tip1.name = `[${tip1.name}|${tip2.name}]`
     this.contractEdge(tmpEdge[0]);
     this.dropEdge(he_tip1_q.twin);
-    this.checkWithData();
+    tip1.name = `[${tip1.name}|${tip2.name}]`
 
-    if (mergeFaces) {
-      // TODO create a test case for this situation
-      log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q.loop}`);
-      this.dropEdge(he_tip1_q); // or he_q_tip2?
-      log(`merged faces ${he_q_tip2.loop} into ${he_tip1_q.loop}`);
-    }
+    this.checkWithData();
   }
 
   reattachL(args: string[]) { this.reattach("L", args); }
