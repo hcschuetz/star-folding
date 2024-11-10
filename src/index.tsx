@@ -225,7 +225,6 @@ class Mesh extends MeshG<VData, LData, EData> {
     }
     recur(start);
     log(`collected: {${[...collected].join(", ")}}`);
-    this.logMesh();
     return collected;
   }
 
@@ -328,36 +327,15 @@ class Mesh extends MeshG<VData, LData, EData> {
     const he_tip1_q = findHE(tip1, q), he_q_tip1 = he_tip1_q.twin;
     const he_q_tip2 = findHE(q, tip2), he_tip2_q = he_q_tip2.twin;
     assertPeers(he_q_tip1, he_tip2_q);
+    noPeers(he_q_tip1, he_tip2_q);
     log(`Half edges ${he_tip2_q} and ${he_q_tip1} should become unreachable`);
 
     // TODO use higher-level Mesh methods.
 
-
-    const boundary = he_q_tip1.loop;
-    const hes_to_tip = [...tip1.halfEdgesIn(), ...tip2.halfEdgesIn()];
-
-    const tip = this.makeVertex("######");
-    tip.name = `[${tip1.name}|${tip2.name}]`;
-    tip.d = {pos: tip1.d.pos}; // or just tip1.d?
-
-    for (const he of hes_to_tip) {
-      he.to = tip;
-    }
-
-    he_q_tip2.twin = he_tip1_q;
-    he_tip1_q.twin = he_q_tip2;
-
-    chainHEs(he_tip2_q.prev, he_q_tip1.next);
-    boundary.firstHalfEdge = he_q_tip1.next;
-
-    q.firstHalfEdgeOut = he_q_tip2;
-    tip.firstHalfEdgeOut = he_tip1_q;
-
-    vertices.delete(tip1);
-    vertices.delete(tip2);
-    vertices.add(tip);
-
-    log(`aligned tips \n  ${tip1}@${tip1.d.pos} and \n  ${tip2}@${tip1.d.pos} into \n  ${tip}@${tip.d.pos}`)
+    const tmpEdge = this.splitLoop(he_q_tip1, he_tip2_q.prev, {create: "left"});
+    tip1.name = `[${tip1.name}|${tip2.name}]`
+    this.contractEdge(tmpEdge[0]);
+    this.dropEdge(he_tip1_q.twin);
     this.checkWithData();
 
     if (mergeFaces) {
