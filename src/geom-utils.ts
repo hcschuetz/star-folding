@@ -86,7 +86,7 @@ export function rotatePoints(
   const transform = (point: MV) =>
     B.plus(B.sandwich(rot)(B.minus(point, pivot)), pivot);
   const angle = B.getAngle(B.minus(from, pivot), B.minus(to, pivot));
-  log(`rotation around: ${axisPoint1}@${axisPoint1} - ${axisPoint2}@${axisPoint2}`,
+  log(`rotation around: ${axisPoint1}} - ${axisPoint2}`,
     `\n  pivot: ${pivot}`,
     `\n  axis: ${B.minus(axisPoint2, axisPoint1)}`,
     `\n  angle: ${(angle * 180 / Math.PI).toFixed(5)}° = ${angle}`,
