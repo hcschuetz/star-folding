@@ -249,7 +249,7 @@ export class MeshG<V,L,E> {
   }
 
   /**
-   * Eliminate `he` and merge vertex `he.to` into `he.from`.
+   * Eliminate edge `(he, he.twin)` and merge vertex `he.to` into `he.from`.
    */
   contractEdge(he: HalfEdgeG<V,L,E>) {
     const {
@@ -275,7 +275,7 @@ export class MeshG<V,L,E> {
   }
 
   /**
-   * Eliminate `he` and merge `he.loop` into `he.twin.loop`.
+   * Eliminate edge `(he, he.twin)` and merge `he.loop` into `he.twin.loop`.
    */
   dropEdge(he: HalfEdgeG<V,L,E>) {
     const {
