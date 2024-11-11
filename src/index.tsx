@@ -3,8 +3,8 @@ import { batch, signal } from '@preact/signals';
 
 import './style.css';
 import { assert, fail, log, setLogger } from './utils';
-import { closeTo0, distance, E3, intersect3Spheres, MV, rotatePoints, rotXY60 } from './geom-utils';
-import { chainHEs, findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
+import { closeTo0, distance, E3, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60 } from './geom-utils';
+import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
 
 const output = signal("");
 
@@ -40,8 +40,8 @@ k 1 12 12
 `;
 
 const actionsDef = `
-#reattachL b c
-#reattachR e d
+reattachL b c
+# reattachR e d
 bend2 f g h
 bend2 d h i
 # bend2 i k a
@@ -75,7 +75,7 @@ const parseActions = (def: string) =>
 
 type VData = { pos: MV };
 type LData = { isFace: boolean };
-type EData = { peer: HalfEdge | null };
+type EData = void;
 type Loop = LoopG<VData, LData, EData>;
 type Vertex = VertexG<VData, LData, EData>;
 type HalfEdge = HalfEdgeG<VData, LData, EData>;
@@ -109,23 +109,6 @@ function isBetweenCoplanarLoops(he: HalfEdge): boolean {
   return true;
 }
 
-function setPeers(he0: HalfEdge, he1: HalfEdge) {
-  he0.d = {peer: he1};
-  he1.d = {peer: he0};
-}
-const peerNull = {peer: null};
-function noPeers(he0: HalfEdge, he1: HalfEdge) {
-  he0.d = he1.d = peerNull;
-}
-const edgeLength = ({from, to}: HalfEdge) => distance(from.d.pos, to.d.pos);
-function assertPeers(he0: HalfEdge, he1: HalfEdge) {
-  assert(!he0.loop.d.isFace);
-  assert(he0.loop === he1.loop);
-  assert(he0.d.peer === he1);
-  assert(he1.d.peer === he0);
-  assert(Math.abs(edgeLength(he0) - edgeLength(he1)) < 1e-8);
-}
-
 class Mesh extends MeshG<VData, LData, EData> {
   verticesByName: Record<string, Vertex> = {};
 
@@ -134,8 +117,6 @@ class Mesh extends MeshG<VData, LData, EData> {
     const {verticesByName} = this;
 
     const [innerHE, outerHE] = this.addCore();
-    noPeers(innerHE, innerHE);
-    setPeers(outerHE, outerHE); // just to make the consistency check happy
     Object.assign(innerHE.loop, {name: "star"      , d: {isFace: true }});
     Object.assign(outerHE.loop, {name: "outerspace", d: {isFace: false}});
     Object.assign(innerHE.to, {name: "dummy", d: {pos: E3.vec([0, 0, 0])}});
@@ -143,41 +124,43 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.checkWithData();
 
     let currentPos = E3.vec([0, 0, 0]);
+    let tips: Vertex[] = [];
 
-    def.trim().split(/\r?\n/).map(line => line.trim())
-    .filter(line => !(line === "" && line.startsWith("#")))
-    .map(line => {
+    def.trim().split(/\r?\n/).forEach(line => {
+      line = line.trim()
+      if (line === "" || line.startsWith("#")) return;
       const [name, ...moves] = line.split(/\s+/);
       const fromPos = currentPos;
       for (const move of moves) {
         currentPos = E3.plus(currentPos, steps[move] ?? fail(`unknown step: ${move}`))
       }
       const innerPos = E3.plus(fromPos, rotXY60(E3.minus(currentPos, fromPos)));
-      return {name, fromPos, innerPos}
-    })
-    .forEach(({name, fromPos, innerPos}, i, gaps) => {
-      const [innerHE1, outerHE1] = this.splitEdgeAcross(outerHE);  
-      const tip = innerHE1.from;
-      tip.name = `[${gaps.at(i-1).name}^${name}]`;
+
+      const [innerHE0, outerHE0] = this.splitEdgeAcross(outerHE);  
+      const tip = innerHE0.from;
       tip.d = {pos: fromPos};
+      tips.push(tip);
       verticesByName[tip.name] = tip;
 
-      const [innerHE2, outerHE2] = this.splitEdgeAcross(outerHE);
-      const inward = innerHE2.from;
+      const [innerHE1, outerHE1] = this.splitEdgeAcross(outerHE);
+      const inward = innerHE1.from;
       inward.name = name;
       inward.d = {pos: innerPos};
       verticesByName[inward.name] = inward;
-
-      noPeers(innerHE1, innerHE2);
-      setPeers(outerHE1, outerHE2);
-    });
-
+    })
+    
     if (E3.normSquared(currentPos) > 1e-12) fail(
       `polygon not closed; offset: ${JSON.stringify(currentPos)}`
     );
 
     // remove dummy node
     this.contractEdge(outerHE);
+
+    tips.forEach(tip => {
+      let [he0, he1] = tip.halfEdgesOut();
+      if (he0.loop === innerHE.loop) [he0, he1] = [he1, he0];
+      tip.name = `[${he0.to.name}^${he1.to.name}]`;
+    });
   }
 
   checkWithData() {
@@ -206,14 +189,6 @@ class Mesh extends MeshG<VData, LData, EData> {
             }`);
           }
         });
-        for (const he of loop.halfEdges()) {
-          assert(he.d.peer === null);
-        }
-      } else {
-        for (const he of loop.halfEdges()) {
-          const {peer} = he.d;
-          if (peer) assertPeers(he, peer);
-        }
       }
     }
     for (const vertex of this.vertices) {
@@ -232,7 +207,11 @@ class Mesh extends MeshG<VData, LData, EData> {
 
   logMesh() {
     for (const loop of this.loops) {
-      log("loop:", loop, "=", ...[...loop.halfEdges()].flatMap(he => [he, he.to]));
+      log(loop, 
+        "=", ...[...loop.halfEdges()].flatMap(he => [he, he.to]));
+      log(`  ${!loop.d ? "???loop" : loop.d.isFace ? "face" : "boundary"}:`
+        , ...[...loop.halfEdges()].map(he => he.to.name)
+      );
     }
     for (const v of this.vertices) {
       const neighbors = [...v.neighbors()];
@@ -268,7 +247,6 @@ class Mesh extends MeshG<VData, LData, EData> {
       halfEdges.find(he => he.to === q),
       {create: "right"}
     )
-    noPeers(he0, he1);
     const newFace = he1.loop;
     log("new face temp name:", newFace.name);
     newFace.d = {isFace: true};
@@ -336,11 +314,9 @@ class Mesh extends MeshG<VData, LData, EData> {
       r.d.pos, tip2.d.pos,
     );
 
-    rotatePoints(p.d.pos, q.d.pos, tip1.d.pos, inters1, [...beyond_pq].map(v => v.d));
-    rotatePoints(q.d.pos, r.d.pos, tip2.d.pos, inters1, [...beyond_qr].map(v => v.d));
-    if (distance(tip1.d.pos, tip2.d.pos) > 1e-8) {
-      fail(`tips ${tip1} and ${tip2} not properly aligned: ${tip1.d.pos} !== ${tip2.d.pos}`);
-    }
+    rotatePoints(projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos), tip1.d.pos, inters1, [...beyond_pq].map(v => v.d));
+    rotatePoints(projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos), tip2.d.pos, inters1, [...beyond_qr].map(v => v.d));
+    assert(distance(tip1.d.pos, tip2.d.pos) < 1e-8);
 
     this.mergeEdges(tip1, q, tip2);
     this.logMesh();
@@ -361,8 +337,6 @@ class Mesh extends MeshG<VData, LData, EData> {
   mergeEdges(tip1: Vertex, q: Vertex, tip2: Vertex) {
     const he_tip1_q = findHE(tip1, q), he_q_tip1 = he_tip1_q.twin;
     const he_q_tip2 = findHE(q, tip2), he_tip2_q = he_q_tip2.twin;
-    assertPeers(he_q_tip1, he_tip2_q);
-    noPeers(he_q_tip1, he_tip2_q);
     log(`Half edges ${he_tip2_q} and ${he_q_tip1} should become unreachable`);
 
     // TODO Let MeshG provide a method combining splitLoop and contractEdge?
@@ -375,12 +349,53 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.checkWithData();
   }
 
-  reattachL(args: string[]) { this.reattach("L", args); }
-  reattachR(args: string[]) { this.reattach("R", args); }
+  reattachL(args: string[]) {
+    if (args.length !== 2) fail(`reattachL expects 2 args`);
+    const {loops, verticesByName} = this;
+    const argVertices = args.map(name => verticesByName[name]);
+    const matchedFaces = [...loops].filter(loop => {
+      if (!(loop.d.isFace)) return false;
+      const faceVertices = [...loop.vertices()];
+      return argVertices.every(v => faceVertices.includes(v));
+    });
+    if (matchedFaces.length !== 1) {
+      console.error(
+        `Expected 1 matching face for bend2 ${args.join(" ")
+        } but found ${matchedFaces.length}`,
+      );
+    }
+    const [face] = matchedFaces;
+    const [p, q] = argVertices;
+    log(`cut ${face} along new edge ${p} - ${q} and re-attach it`);
 
-  reattach(lr: "L"| "R", args: string[]) {
-    fail("unimplemented");
+    const he_face_p = [...p.halfEdgesIn()].find(he => he.loop === face);
+    const he_face_q = [...q.halfEdgesIn()].find(he => he.loop === face);
+    const [he_pq, he_qp] = this.splitLoop(he_face_p, he_face_q, {create: "right"});
+
+    const [he_qp1, he_pq1] = this.splitLoop(he_pq, he_face_p, {create: "left"});
+    const [he_pNew_p, he_p_pNew] = this.splitVertex(he_face_p.twin.prev, he_qp1, {create: "left"});
+    // he_p_pNew.to.name = `${p.name}.rot(${q.name})`;
+    he_p_pNew.to.d = p.d;
+    this.dropEdge(he_p_pNew);
+
+    rotatePoints(
+      q.d.pos, he_face_q.from.d.pos, he_face_q.twin.prev.from.d.pos,
+      [...he_face_q.loop.vertices()].map(v => v.d),
+    );
+
+    const [he_t1_t2, he_t2_t1] = this.splitLoop(he_face_q.twin, he_face_q.twin.prev.prev, {create: "left"});
+    const he_q_t1 = he_t1_t2.prev;
+    const he_t2_q = he_t1_t2.next;
+    const t = this.contractEdge(he_t1_t2);
+    t.name = `[${he_t1_t2.from.name}|${he_t1_t2.to.name}]`;
+    this.dropEdge(he_q_t1);
+    this.dropEdge(he_t2_q);
   }
+}
+
+function logEdge(name: string, he0: HalfEdge) {
+  const he1 = he0.twin;
+  log(`${name}: ${he0.prev}|${he1.next} ~ ${he1.to} ==[${he0}(${he0.loop}) | twin: ${he1}(${he1.loop})]==> ${he0.to} ~ ${he0.next}|${he1.prev}`);
 }
 
 const cmdNames = ["bend2", "reattachL", "reattachR"];

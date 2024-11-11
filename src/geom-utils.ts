@@ -71,14 +71,10 @@ export function intersect3Spheres(
 }
 
 export function rotatePoints(
-  axisPoint1: MV, axisPoint2: MV,
+  pivot: MV,
   from: MV, to: MV,
   points: Iterable<{pos: MV}>,
 ) {
-  const pivot = projectPointToLine(from, axisPoint1, axisPoint2);
-  const pivot2 = projectPointToLine(to, axisPoint1, axisPoint2);
-  log(`pivot: ${pivot} (should equal ${pivot2})`);
-  assert(distance(pivot, pivot2) < 1e-8);
   const dir1 = B.normalize(B.minus(to, pivot));
   const dir2 = B.normalize(B.minus(from, pivot));
   const dirMid = B.normalize(B.plus(dir1, dir2));
@@ -86,11 +82,7 @@ export function rotatePoints(
   const transform = (point: MV) =>
     B.plus(B.sandwich(rot)(B.minus(point, pivot)), pivot);
   const angle = B.getAngle(B.minus(from, pivot), B.minus(to, pivot));
-  log(`rotation around: ${axisPoint1}} - ${axisPoint2}`,
-    `\n  pivot: ${pivot}`,
-    `\n  axis: ${B.minus(axisPoint2, axisPoint1)}`,
-    `\n  angle: ${(angle * 180 / Math.PI).toFixed(5)}° = ${angle}`,
-  );
+  log(`rotation around: ${pivot}; angle: ${(angle * 180 / Math.PI).toFixed(5)}° = ${angle}`);
   for (const pt of points) {
     const newPos = transform(pt.pos);
     log(`  - rotate ${pt} from ${pt.pos} to ${newPos}`);

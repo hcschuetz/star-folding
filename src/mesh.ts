@@ -24,6 +24,7 @@ export class HalfEdgeG<V,L,E> extends WithId<V,L,E> {
   next: HalfEdgeG<V,L,E>;
 
   to: VertexG<V,L,E>;
+  alive = true;
   d?: E;
 
   get from() { return this.twin.to; }
@@ -135,6 +136,13 @@ export class MeshG<V,L,E> {
     return l;
   }
 
+  /**
+   * Create a new twin pair of half edges adjacent to the given loops and vertices.
+   * 
+   * The returned pair consists of
+   * - the half edge adjacent to `l0` and pointing from `v0` to `v1` and
+   * - the half edge adjacent to `l1` and pointing from `v1` to `v0`.
+   */
   makeEdge(
     l0: LoopG<V,L,E>, l1: LoopG<V,L,E>,
     v0: VertexG<V,L,E>, v1: VertexG<V,L,E>
@@ -250,6 +258,7 @@ export class MeshG<V,L,E> {
 
   /**
    * Eliminate edge `(he, he.twin)` and merge vertex `he.to` into `he.from`.
+   * Return the latter.
    */
   contractEdge(he: HalfEdgeG<V,L,E>) {
     const {
@@ -271,11 +280,16 @@ export class MeshG<V,L,E> {
     twin_loop.firstHalfEdge = twin_next;
     from.firstHalfEdgeOut = next;
 
-    this.vertices.delete(to); // TODO somehow mark he and he.twin as dead?
+    this.vertices.delete(to);
+    he.alive = false;
+    he.twin.alive = false;
+
+    return from;
   }
 
   /**
    * Eliminate edge `(he, he.twin)` and merge `he.loop` into `he.twin.loop`.
+   * Return the latter.
    */
   dropEdge(he: HalfEdgeG<V,L,E>) {
     const {
@@ -297,13 +311,20 @@ export class MeshG<V,L,E> {
     to.firstHalfEdgeOut = next
     twin_loop.firstHalfEdge = twin_next;
 
-    this.loops.delete(loop); // TODO somehow mark he and he.twin as dead?
+    this.loops.delete(loop); 
+    he.alive = false;
+    he.twin.alive = false;
+
+    return twin_loop;
   }
 
   check() {
     const {vertices, loops, fail} = this;
 
     function checkHE(he: HalfEdgeG<V,L,E>) {
+      if (!he.alive) fail(
+        `${he} is not alive`
+      );
       if (!vertices.has(he.to)) fail(
         `${he} points to missing vertex ${he.to}`
       );
