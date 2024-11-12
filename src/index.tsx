@@ -32,7 +32,7 @@ import { render } from 'preact';
 import { batch, signal } from '@preact/signals';
 
 import './style.css';
-import { fail, log, setLogger } from './utils';
+import { fail, getLines, log, setLogger } from './utils';
 import { closeTo0, distance, E3, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60 } from './geom-utils';
 import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
 import { TAU } from './geometric-algebra/utils';
@@ -127,9 +127,7 @@ class Mesh extends MeshG<VData, LData, EData> {
     let currentPos = E3.vec([0, 0, 0]);
     let tips: Vertex[] = [];
 
-    for (let line of def.trim().split(/\r?\n/)) {
-      line = line.trim();
-      if (line === "" || line.startsWith("//")) continue;
+    for (let line of getLines(def)) {
       const [name, ...moves] = line.split(/\s+/);
       const fromPos = currentPos;
       for (const move of moves) {
@@ -465,9 +463,7 @@ function main() {
   mesh.logMesh();
   mesh.checkWithData();
 
-  for (let line of actionsDef.trim().split(/\r?\n/)) {
-    line = line.trim();
-    if (line === "" || line.startsWith("//")) continue;
+  for (let line of getLines(actionsDef)) {
     log("=".repeat(160));
     log(line);
     const [cmd, ...args] = line.trim().split(/\s+/);

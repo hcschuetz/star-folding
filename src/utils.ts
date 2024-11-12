@@ -22,3 +22,8 @@ export function assert(test: boolean) {
     fail("assertion failed");
   }
 }
+
+export const getLines = (text: string) => text.trim().split(/\r?\n/).flatMap(line => {
+  line = line.trim();
+  return line === "" || line.startsWith("//") ? [] : [line];
+})
