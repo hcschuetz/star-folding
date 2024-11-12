@@ -82,11 +82,8 @@ if (!true) {
 export function splitPointPair(pp: Multivector<never>) {
   let discriminant = R.scalarProduct(pp, pp);
   if (discriminant < 0) {
-    if (discriminant > -1e-10) {
-      discriminant = 0;
-    } else {
-      console.error("negative discriminant:", discriminant);
-    }
+    if (discriminant < -1e-10) fail(`negative discriminant: ${discriminant}`);
+    discriminant = 0;
   }
   const root = Math.sqrt(discriminant);
   const invDenominator = R.inverse(R.contractLeft(R.negate(ei), pp));

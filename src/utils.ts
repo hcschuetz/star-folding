@@ -13,12 +13,12 @@ export function log(...args: any[]) {
 
 export function fail(msg: string): never {
   // debugger;
+  log(`FAILED: ${msg}`);
   throw new Error(msg);
 };
 
 export function assert(test: boolean) {
   if (!test) {
-    debugger;
     fail("assertion failed");
   }
 }

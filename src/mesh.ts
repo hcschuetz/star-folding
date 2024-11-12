@@ -29,7 +29,7 @@ export class HalfEdgeG<V,L,E> extends WithId<V,L,E> {
 
   get from() { return this.twin.to; }
 
-  toString() { return "he" + this.id; }
+  toString() { return "he" + this.id + (this.alive ? "" : "[dead]"); }
 }
 
 export type Edge<V,L,E> = [HalfEdgeG<V,L,E>, HalfEdgeG<V,L,E>];
@@ -299,8 +299,12 @@ export class MeshG<V,L,E> {
     if (loop === twin_loop) this.fail(
       `cannot drop edge adjacent to the same loop twice`
     );
+    this.log("dropEdge:", loop, he, next)
 
+    let count = 0;
     for (let heAux = next; heAux !== he; heAux = heAux.next) {
+      this.log("dropEdge, reassign:", loop, heAux)
+      if (++count > SIZE_LIMIT) this.fail(`dropEdge: loop ${loop} too long`);
       heAux.loop = twin_loop;
     }
 
@@ -373,7 +377,7 @@ export function findHE<V,L,E>(from: VertexG<V,L,E>, to: VertexG<V,L,E>) {
     }
   }
   if (results.length !== 1) from.mesh.fail(
-    `Found ${results.length} half-edges from ${from.name} to ${to.name}.`
+    `Found ${results.length} half-edges from ${from} to ${to}.`
   );
   return results[0];
 }

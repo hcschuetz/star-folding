@@ -1,10 +1,41 @@
+const polygonDef = `
+a 11
+b 10
+c 10 9
+d 9 8
+e 7
+f 6 6
+g 5
+h 4 4
+i 4 3
+j 2 2
+k 1 12 12
+`;
+
+const actionsDef = `
+reattachL b c
+reattachL e d
+// reattachL e f
+reattachL j i
+reattachL i k
+bend2 k c d
+bend2 k d f
+bend2 f g h
+bend2 f h i
+bend2 f k a
+bend2 e f i
+bend2 a b e
+`;
+
+
 import { render } from 'preact';
 import { batch, signal } from '@preact/signals';
 
 import './style.css';
-import { assert, fail, log, setLogger } from './utils';
+import { fail, log, setLogger } from './utils';
 import { closeTo0, distance, E3, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60 } from './geom-utils';
 import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
+import { TAU } from './geometric-algebra/utils';
 
 const output = signal("");
 
@@ -25,28 +56,6 @@ export function App() {
 
 render(<App />, document.getElementById('app'));
 
-const polygonDef = `
-a 11
-b 10
-c 10 9
-d 9 8
-e 7
-f 6 6
-g 5
-h 4 4
-i 4 3
-j 2 2
-k 1 12 12
-`;
-
-const actionsDef = `
-reattachL b c
-# reattachR e d
-bend2 f g h
-bend2 d h i
-# bend2 i k a
-`;
-
 const r3 = Math.sqrt(3), r3half = r3 / 2;
 
 const steps = {
@@ -63,14 +72,6 @@ const steps = {
   "10": E3.vec([-1 * r3half,  1 / 2, 0]),
   "11": E3.vec([-1 * r3half,  3 / 2, 0]),
 };
-
-const parseActions = (def: string) =>
-  def.trim().split(/\r?\n/)
-  .filter(line => !line.startsWith("#"))
-  .map(line => {
-    const [cmd, ...args] = line.trim().split(/\s+/);
-    return {cmd, args}
-  });
 
 
 type VData = { pos: MV };
@@ -126,9 +127,9 @@ class Mesh extends MeshG<VData, LData, EData> {
     let currentPos = E3.vec([0, 0, 0]);
     let tips: Vertex[] = [];
 
-    def.trim().split(/\r?\n/).forEach(line => {
-      line = line.trim()
-      if (line === "" || line.startsWith("#")) return;
+    for (let line of def.trim().split(/\r?\n/)) {
+      line = line.trim();
+      if (line === "" || line.startsWith("//")) continue;
       const [name, ...moves] = line.split(/\s+/);
       const fromPos = currentPos;
       for (const move of moves) {
@@ -147,8 +148,8 @@ class Mesh extends MeshG<VData, LData, EData> {
       inward.name = name;
       inward.d = {pos: innerPos};
       verticesByName[inward.name] = inward;
-    })
-    
+    }
+
     if (E3.normSquared(currentPos) > 1e-12) fail(
       `polygon not closed; offset: ${JSON.stringify(currentPos)}`
     );
@@ -184,8 +185,8 @@ class Mesh extends MeshG<VData, LData, EData> {
             E3.minus(v3.d.pos, v.d.pos),
           );
           if (!closeTo0(vol)) {
-            fail(`face ${loop} not flat (${vol}): ${
-              [v, v1, v2, v3].flatMap(vtx => [vtx, vtx.d.pos]).join(", ")
+            fail(`face ${loop} not flat (${vol}; ${vol.value("xyz")}): ${
+              [v, v1, v2, v3].flatMap(vtx => ["\n ", vtx, vtx.d.pos]).join(", ")
             }`);
           }
         });
@@ -206,14 +207,15 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   logMesh() {
-    for (const loop of this.loops) {
+    const {vertices, loops} = this;
+    for (const loop of loops) {
       log(loop, 
         "=", ...[...loop.halfEdges()].flatMap(he => [he, he.to]));
       log(`  ${!loop.d ? "???loop" : loop.d.isFace ? "face" : "boundary"}:`
         , ...[...loop.halfEdges()].map(he => he.to.name)
       );
     }
-    for (const v of this.vertices) {
+    for (const v of vertices) {
       const neighbors = [...v.neighbors()];
       log(
         v.toString().padEnd(15), v.firstHalfEdgeOut,
@@ -222,23 +224,51 @@ class Mesh extends MeshG<VData, LData, EData> {
         "faces:", [...v.loops()].join(" "),
       );
     }
-  }
-
-  collectVertices(start: Vertex, exclude: Set<Vertex>) {
-    const collected = new Set<Vertex>();
-    function recur(v: Vertex) {
-      if (exclude.has(v) || collected.has(v)) return;
-      collected.add(v);
-      [...v.neighbors()].forEach(recur);
+    const vertexArray = [...vertices];
+    const nVertices = vertexArray.length;
+    for (let i = 0; i < nVertices - 1; i++) {
+      const vi = vertexArray[i];
+      for (let j = i + 1; j < nVertices; j++) {
+        const vj = vertexArray[j];
+        const dist = distance(vi.d.pos, vj.d.pos);
+        if (dist < 1e-4) log(`Nearby: ${vi}, ${vj} (${dist})`);
+      }
     }
-    recur(start);
-    log(`collected: {${[...collected].join(", ")}}`);
-    return collected;
+    log(`${
+      vertices.size} vertices (${
+      [...vertices].filter(v => v.name.includes("^")).length} tips), ${
+      loops.size} loops (${
+      [...loops].filter(l => l.d.isFace).length
+    } faces)`);
+    const edgeMessages: string[] = [];
+    for (const l of loops) {
+      if (!l.d.isFace) continue;
+      for (const he of l.halfEdges()) {
+        if (!he.twin.loop.d.isFace) continue;
+        if (he.from.name > he.to.name) continue; // avoid duplicate output
+        // TODO compute a directed angle (as seen when looking along the half-edge)?
+        const angle = E3.getAngle(
+          E3.normalize(E3.minus(
+            he.next.to.d.pos,
+            projectPointToLine(he.next.to.d.pos, he.from.d.pos, he.to.d.pos),
+          )),
+          E3.normalize(E3.minus(
+            he.twin.next.to.d.pos,
+            projectPointToLine(he.twin.next.to.d.pos, he.from.d.pos, he.to.d.pos),
+          )),
+        );
+        edgeMessages.push(
+          `${he.from.name}->${he.to.name}: ${(angle/TAU*360).toFixed(5)}° ${
+            he.from} ==[${he}(${he.loop})|${he.twin}(${he.twin.loop})]==> ${he.to}`
+        );
+      }
+    }
+    log(edgeMessages.sort().join("\n"));
   }
 
   splitFace(face: Loop, p: Vertex, q: Vertex) {
     log("---------------------------------------------------------");
-    log(`splitting ${p.name}-${q.name}`)
+    log(`splitting ${face} along ${p.name}-${q.name}`)
     this.checkWithData();
 
     const halfEdges = [...face.halfEdges()];
@@ -260,21 +290,14 @@ class Mesh extends MeshG<VData, LData, EData> {
   bend2(args: string[]) {
     if (args.length !== 3) fail("bend2 expects 3 args");
     const {loops, verticesByName} = this;
-    const argVertices = args.map(name => verticesByName[name]);
-    const matchedFaces = [...loops].filter(loop => {
-      if (!(loop.d.isFace)) return false;
-      const faceVertices = [...loop.vertices()];
-      return argVertices.every(v => faceVertices.includes(v));
-    });
-    if (matchedFaces.length !== 1) {
-      console.error(
-        `Expected 1 matching face for bend2 ${args.join(" ")
-        } but found ${matchedFaces.length}`,
-      );
-    }
-    const [face] = matchedFaces;
+    const argVertices = args.map(name =>
+      verticesByName[name] ?? fail(`no such vertex: ${name}`)
+    );
     const [p, q, r] = argVertices;
-    log(`bend ${face} along new edges ${p} - ${q} and ${q} - ${r}`)
+    const face1 = findUniqueFace(p, q);
+    log(`bend ${face1} along new edges ${p} - ${q}`);
+    const face2 = findUniqueFace(q, r);
+    log(`bend ${face2} along new edges ${q} - ${r}`);
 
     const he_q_tip1 = [...q.halfEdgesOut()].find(he => !he.loop.d.isFace);
     const he_tip1_q = he_q_tip1.twin;
@@ -287,12 +310,12 @@ class Mesh extends MeshG<VData, LData, EData> {
       `\n  ${point.name}: ${point.d.pos.toString()}`
     ).join(""));
 
-    this.splitFace(face, p, q);
-    this.splitFace(face, q, r);
+    this.splitFace(face1, p, q);
+    this.splitFace(face2, q, r);
 
     const border = new Set([p, q, r]);
-    const beyond_pq = this.collectVertices(tip1, border);
-    const beyond_qr = this.collectVertices(tip2, border);
+    const beyond_pq = collectVertices(tip1, border);
+    const beyond_qr = collectVertices(tip2, border);
     log("---------------------------------------------------------");
 
     if ([...beyond_pq].some(vtx => beyond_qr.has(vtx))) fail(
@@ -314,19 +337,27 @@ class Mesh extends MeshG<VData, LData, EData> {
       r.d.pos, tip2.d.pos,
     );
 
+    log(`rotation ${p}-${q} ${projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos)}[${tip1.d.pos} => ${inters1}]:`, ...beyond_pq);
     rotatePoints(projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos), tip1.d.pos, inters1, [...beyond_pq].map(v => v.d));
+    log(`rotation ${q}-${r} ${projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos)}[${tip2.d.pos} => ${inters1}]:`, ...beyond_qr);
     rotatePoints(projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos), tip2.d.pos, inters1, [...beyond_qr].map(v => v.d));
-    assert(distance(tip1.d.pos, tip2.d.pos) < 1e-8);
+    const dist = distance(tip1.d.pos, tip2.d.pos);
+    if (dist > 1e-8) fail(
+      `vertices ${tip1} ${tip2} to merge too far apart: ${dist}`
+    );
 
     this.mergeEdges(tip1, q, tip2);
     this.logMesh();
     this.checkWithData();
 
-    if (isBetweenCoplanarLoops(findHE(tip1, q))) {
+    const he_tip1_q_aux = findHE(tip1, q);
+    log("compare", he_tip1_q === he_tip1_q_aux, he_tip1_q, he_tip1_q_aux);
+    if (isBetweenCoplanarLoops(he_tip1_q_aux)) {
       // TODO create a test case for this situation
-      log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q.loop}`);
-      this.dropEdge(he_tip1_q); // or he_q_tip2?
-      log(`merged faces ${he_q_tip2.loop} into ${he_tip1_q.loop}`);
+      log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q_aux.loop}`);
+      this.logMesh(); this.checkWithData();
+      this.dropEdge(he_tip1_q_aux); // or he_q_tip2?
+      log(`merged faces ${he_q_tip2.loop} into ${he_tip1_q_aux.loop}`);
     }
   }
 
@@ -344,28 +375,21 @@ class Mesh extends MeshG<VData, LData, EData> {
     const tmpEdge = this.splitLoop(he_q_tip1, he_tip2_q.prev, {create: "left"});
     this.contractEdge(tmpEdge[0]);
     this.dropEdge(he_q_tip1);
-    tip1.name = `[${tip1.name}|${tip2.name}]`
+    tip1.name =
+      tip2.name === tip1.name + "'" ? tip1.name : `[${tip1.name}|${tip2.name}]`;
 
+    this.logMesh();
     this.checkWithData();
   }
 
   reattachL(args: string[]) {
-    if (args.length !== 2) fail(`reattachL expects 2 args`);
     const {loops, verticesByName} = this;
-    const argVertices = args.map(name => verticesByName[name]);
-    const matchedFaces = [...loops].filter(loop => {
-      if (!(loop.d.isFace)) return false;
-      const faceVertices = [...loop.vertices()];
-      return argVertices.every(v => faceVertices.includes(v));
-    });
-    if (matchedFaces.length !== 1) {
-      console.error(
-        `Expected 1 matching face for bend2 ${args.join(" ")
-        } but found ${matchedFaces.length}`,
-      );
-    }
-    const [face] = matchedFaces;
-    const [p, q] = argVertices;
+
+    if (args.length !== 2) fail(`reattachL expects 2 args`);
+    const [pName, qName] = args;
+    const p = verticesByName[pName] ?? fail(`no such vertex: ${pName}`);
+    const q = verticesByName[qName] ?? fail(`no such vertexx: ${qName}`);
+    const face = findUniqueFace(p, q);
     log(`cut ${face} along new edge ${p} - ${q} and re-attach it`);
 
     const he_face_p = [...p.halfEdgesIn()].find(he => he.loop === face);
@@ -374,13 +398,13 @@ class Mesh extends MeshG<VData, LData, EData> {
 
     const [he_qp1, he_pq1] = this.splitLoop(he_pq, he_face_p, {create: "left"});
     const [he_pNew_p, he_p_pNew] = this.splitVertex(he_face_p.twin.prev, he_qp1, {create: "left"});
-    // he_p_pNew.to.name = `${p.name}.rot(${q.name})`;
-    he_p_pNew.to.d = p.d;
+    he_p_pNew.to.name = p.name + "'";
+    he_p_pNew.to.d = {pos: p.d.pos};
     this.dropEdge(he_p_pNew);
 
     rotatePoints(
       q.d.pos, he_face_q.from.d.pos, he_face_q.twin.prev.from.d.pos,
-      [...he_face_q.loop.vertices()].map(v => v.d),
+      [...collectVertices(he_face_q.from, new Set([p, q]))].map(v => v.d),
     );
 
     const [he_t1_t2, he_t2_t1] = this.splitLoop(he_face_q.twin, he_face_q.twin.prev.prev, {create: "left"});
@@ -398,6 +422,40 @@ function logEdge(name: string, he0: HalfEdge) {
   log(`${name}: ${he0.prev}|${he1.next} ~ ${he1.to} ==[${he0}(${he0.loop}) | twin: ${he1}(${he1.loop})]==> ${he0.to} ~ ${he0.next}|${he1.prev}`);
 }
 
+/**
+ * Find the face adjacent to all the given vertices.
+ * Fail if there is no unique such face.
+ */
+function findUniqueFace(p: Vertex, q: Vertex) {
+  const matchedFaces = [...p.loops()].filter(loop =>
+    loop.d.isFace && [...loop.vertices()].includes(q)
+  );
+  if (matchedFaces.length !== 1) fail(
+    `Expected 1 matching face adjacent to ${p} and ${q} but found ${
+      matchedFaces.length}: {${matchedFaces.join(", ")}}`,
+  );
+  const [face] = matchedFaces
+  log(`Found unique face ${face} adjacent to ${p} and ${q}`);
+  // TODO Warn if there is already an edge from p to q?
+  return face;
+}
+
+/**
+ * Return the vertices reachable from start without crossing the border.
+ */
+function collectVertices(start: Vertex, border: Set<Vertex>): Set<Vertex> {
+  log(`collecting from ${start} to`, ...border);
+  const collected = new Set<Vertex>();
+  function recur(v: Vertex) {
+    if (border.has(v) || collected.has(v)) return;
+    collected.add(v);
+    [...v.neighbors()].forEach(recur);
+  }
+  recur(start);
+  log(`collected: {${[...collected].join(", ")}}`);
+  return collected;
+}
+
 const cmdNames = ["bend2", "reattachL", "reattachR"];
 
 function main() {
@@ -407,16 +465,19 @@ function main() {
   mesh.logMesh();
   mesh.checkWithData();
 
-  for (const {cmd, args} of parseActions(actionsDef)) {
+  for (let line of actionsDef.trim().split(/\r?\n/)) {
+    line = line.trim();
+    if (line === "" || line.startsWith("//")) continue;
     log("=".repeat(160));
-    log(cmd, ...args);
+    log(line);
+    const [cmd, ...args] = line.trim().split(/\s+/);
     if (!cmdNames.includes(cmd)) fail(`Unknown command "${cmd}"`);
     mesh[cmd](args);
     mesh.logMesh();
     mesh.checkWithData();
   }
 
-  log("REACHED THE END");
+  log("SUCCESSFULLY COMPLETED ALL ACTIONS");
   background.value = "#efe";
 }
 
