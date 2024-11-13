@@ -7,12 +7,22 @@ body {
 	padding: 0;
 }
 
-button, textarea {
+button, textarea, .explanation {
 	margin: 8px;
 }
 
 textarea {
 	height: 250px;
+}
+
+summary {
+	/* make it look similar to a link */
+	cursor: pointer;
+	text-decoration: underline;
+
+	&:hover {
+		opacity: 60%;
+	}
 }
 
 .phase {

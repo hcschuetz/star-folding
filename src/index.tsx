@@ -104,11 +104,15 @@ export function App() {
       <textarea ref={actionsDefElem}>
         {initialActionsDef.trim()}
       </textarea>
+      <br/>
       <button onClick={run}>run</button>
       {
         phases.length > 0 &&
         <div>
-        {phases.length - 1} transformations; {phases.at(-1)?.ok ? "ok" : "failed"}
+          { phases.at(-1).ok
+          ? `${phases.length - 1} transformation succeeded`
+          : `transformation #${phases.length} failed`
+          }
         </div>
       }
       {phases.map((phaseData) => <Phase phaseData={phaseData}/>)}
@@ -173,11 +177,11 @@ function renderToCanvas(
   });
 
   for (let i = -12; i < 4; i++) {
-    for (const [skewDown, skewUp] of [[0,0], [-5,+5], [+5,-5]]) {
+    for (const [skewDown, skewUp] of [[0,0], [0.5, 0.5], [-5,+5], [+5,-5]]) {
       const line = B.MeshBuilder.CreateTube("grid", {
         path: [
-          new B.Vector3((i+skewDown)*r3half, -5, 0),
-          new B.Vector3((i+skewUp  )*r3half, +5, 0),
+          new B.Vector3((i+skewDown)*r3, -5, 0),
+          new B.Vector3((i+skewUp  )*r3, +5, 0),
         ],
         radius: 0.005,
       });
