@@ -1,35 +1,6 @@
-const initialPolygonDef = `
-a 11
-b 10
-c 10 9
-d 9 8
-e 7
-f 6 6
-g 5
-h 4 4
-i 4 3
-j 2 2
-k 1 12 12
-`;
-
-const initialActionsDef = `
-reattachL b c
-reattachL e d
-// reattachL e f
-reattachL j i
-reattachL i k
-bend2 k c d
-bend2 k d f
-bend2 f g h
-bend2 f h i
-bend2 f k a
-bend2 e f i
-bend2 a b e
-`;
-
-
 import { render } from 'preact';
-import { batch, Signal, signal, useSignal } from '@preact/signals';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { signal } from '@preact/signals';
 import * as B from 'babylonjs';
 
 import './style.css';
@@ -37,26 +8,20 @@ import { fail, getLines, log, setLogger } from './utils';
 import { closeTo0, distance, E3, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60 } from './geom-utils';
 import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
 import { TAU } from './geometric-algebra/utils';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { initialActionsDef, initialPolygonDef } from './init';
 
-const output = signal("");
-
-const background = signal("#fee");
-
-setLogger(function logToOutput(...args: any[]) {
-  output.value += args.join(" ") + "\n";
-});
 
 type PhaseData = {
+  logTitle: string;
+  logText: string;
+  ok: boolean;
+
   /** Contains (x,y,z) triplets of coordinates */
-  vertices: [number, number, number][],
+  vertices: B.Vector3[],
   /** Contains pairs of vertex indices */
   edges: [number, number][],
   /** Contains triplets of vertex indices */
   triangles: [number, number, number][],
-
-  logTitle: string;
-  logText: string;
 }
 
 export function App() {
@@ -72,22 +37,20 @@ export function App() {
     const actionsDef = actionsDefElem.current.value;
 
     let logText = "";
+    let ok = true;
     const log = (...args: any[]) => { logText += args.join(" ") + "\n"; };
-
+    setLogger(log);
     const fail = (msg: string) => { throw new Error("FAILED: " + msg); };
-
-    const mesh = new Mesh(polygonDef, log, fail);
-    mesh.logMesh();
-    mesh.checkWithData();
+    let mesh = new Mesh(log, fail);
 
     function emitPhase(logTitle: string) {
       const vertexArray = [...mesh.vertices];
       const vertexToIndex = new Map(vertexArray.map((v, i) => [v, i]));
       phasesList.push({
-        logTitle, logText,
+        logTitle, logText, ok,
         vertices: vertexArray.map(v => {
           const mv = v.d.pos;
-          return [mv.value("x"), mv.value("y"), mv.value("z")];
+          return new B.Vector3(mv.value("x"), mv.value("y"), mv.value("z"));
         }),
         edges: vertexArray.flatMap(v =>
           [...v.neighbors()].map(w =>
@@ -98,100 +61,149 @@ export function App() {
       });
     }
 
-    emitPhase("Initialization");
-
-    for (let line of getLines(actionsDef)) {
-      logText = "";
+    createPhases: {
       try {
-        const [cmd, ...args] = line.trim().split(/\s+/);
-        if (!cmdNames.includes(cmd)) fail(`Unknown command "${cmd}"`);
-        mesh[cmd](args);
+        mesh.setup(polygonDef);
         mesh.logMesh();
         mesh.checkWithData();
       } catch (e) {
+        ok = false;
         log("CAUGHT EXCEPTION:", e);
-        break;
-      } finally {
-        emitPhase(line);
+        break createPhases;
+      }
+      finally {
+        emitPhase("initialize")
+      }
+
+      for (let line of getLines(actionsDef)) {
+        logText = "";
+        try {
+          const [cmd, ...args] = line.trim().split(/\s+/);
+          if (!cmdNames.includes(cmd)) fail(`Unknown command "${cmd}"`);
+          mesh[cmd](args);
+          mesh.logMesh();
+          mesh.checkWithData();
+        } catch (e) {
+          ok = false;
+          log("CAUGHT EXCEPTION:", e);
+          break createPhases;
+        } finally {
+          emitPhase(line);
+        }
       }
     }
 
     setPhases(phasesList);
-    console.log(phasesList.length, "phases", phasesList)
   }
 
   return (
     <div>
-      <textarea ref={polygonDefElem} style={{width: "100px", height: "250px"}}>
+      <textarea ref={polygonDefElem}>
         {initialPolygonDef.trim()}
       </textarea>
-      <textarea ref={actionsDefElem} style={{width: "200px", height: "250px"}}>
+      <textarea ref={actionsDefElem}>
         {initialActionsDef.trim()}
       </textarea>
       <button onClick={run}>run</button>
-      <br/>
+      {
+        phases.length > 0 &&
+        <div>
+        {phases.length - 1} transformations; {phases.at(-1)?.ok ? "ok" : "failed"}
+        </div>
+      }
       {phases.map((phaseData) => <Phase phaseData={phaseData}/>)}
     </div>
   );
 }
 
 function Phase(props: {phaseData: PhaseData}) {
-  const {logTitle, logText, vertices: verticesRaw, edges, triangles} = props.phaseData;
+  const {logTitle, logText, ok, vertices, edges, triangles} = props.phaseData;
   const canvas = useRef<HTMLCanvasElement>();
 
-  useEffect(() => {
-    const noBubble = (e: Event) => e.preventDefault();
-    canvas.current.addEventListener("wheel", noBubble);
-
-    const engine = new B.Engine(canvas.current, true);
-    const scene = new B.Scene(engine);
-
-    const center = verticesRaw
-      .reduce((acc, v) => acc.addInPlaceFromFloats(...v), B.Vector3.Zero())
-      .scaleInPlace(1 / verticesRaw.length);
-    const vertices = verticesRaw.map(v =>
-      new B.Vector3(...v).subtractInPlace(center).scaleInPlace(1.4)
-    );
-
-    vertices.forEach((pos, i) => {
-      const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
-      ball.position = pos;
-    });
-    edges.forEach(([i, j]) => {
-      B.MeshBuilder.CreateTube(`line${i}_${j}`, {
-        path: [vertices[i], vertices[j]],
-        radius: .03,
-      })
-    })
-
-
-    const camera = new B.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, new B.Vector3(0, 0, 0));
-    camera.attachControl(canvas, true);
-    const light = new B.HemisphericLight("light", new B.Vector3(1, 1, 0));
-
-    const renderScene = () => scene.render()
-    engine.runRenderLoop(renderScene);
-
-    const resizeEngine = () => engine.resize();
-    window.addEventListener("resize", resizeEngine);
-
-    return () => {
-      window.removeEventListener("resize", resizeEngine);
-      engine.stopRenderLoop(renderScene);
-      engine.dispose();
-      canvas.current.removeEventListener("wheel", noBubble);  
-    };
-  });
+  useEffect(() => renderToCanvas(canvas.current, vertices, edges, triangles));
 
   return (
-    <div>
-      <details>
+    <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
+      <details open={!ok}>
         <summary><code>{logTitle}</code></summary>
-        <pre style={{background: background.value, padding: 5}}>{logText}</pre>
+        <pre>{logText}</pre>
       </details>
-      <canvas style={{width: "500px", height: "500px"}} ref={canvas}/>
+      <canvas ref={canvas}/>
     </div>
   )
+}
+
+function renderToCanvas(
+  canvas: HTMLCanvasElement,
+  vertices: B.Vector3[],
+  edges: [number, number][],
+  triangles: [number, number, number][],
+) {
+  const noBubble = (e: Event) => e.preventDefault();
+  canvas.addEventListener("wheel", noBubble);
+
+  const engine = new B.Engine(canvas, true);
+  const scene = new B.Scene(engine);
+
+  const lineMaterial = new B.StandardMaterial("myMaterial", scene);
+  lineMaterial.diffuseColor = B.Color3.Yellow();
+
+  const gridMaterial = new B.StandardMaterial("myMaterial", scene);
+  gridMaterial.diffuseColor = B.Color3.Black();
+
+  const center = vertices
+    .reduce((acc, v) => acc.addInPlace(v), B.Vector3.Zero())
+    .scaleInPlace(1 / vertices.length);
+
+  const root = new B.TransformNode("root", scene);
+  root.position = center.negate();
+
+  vertices.forEach((pos, i) => {
+    const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
+    ball.position = pos;
+    ball.parent = root;
+  });
+  edges.forEach(indices => {
+    const line = B.MeshBuilder.CreateTube(`line${indices}`, {
+      path: indices.map(i => vertices[i]),
+      radius: .02,
+    });
+    line.material = lineMaterial;
+    line.parent = root;
+  });
+
+  for (let i = -12; i < 4; i++) {
+    for (const [skewDown, skewUp] of [[0,0], [-5,+5], [+5,-5]]) {
+      const line = B.MeshBuilder.CreateTube("grid", {
+        path: [
+          new B.Vector3((i+skewDown)*r3half, -5, 0),
+          new B.Vector3((i+skewUp  )*r3half, +5, 0),
+        ],
+        radius: 0.005,
+      });
+      line.material = gridMaterial;
+      line.parent = root;
+    }
+  }
+
+  const camera = new B.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2, 10, new B.Vector3(0, 0, 0), scene);
+  camera.attachControl(canvas, true);
+
+  const light = new B.HemisphericLight("light", new B.Vector3(1, 1, 0), scene);
+  light.intensity = 3;
+
+  const renderScene = () => scene.render()
+  engine.runRenderLoop(renderScene);
+
+  const resizeEngine = () => engine.resize();
+  window.addEventListener("resize", resizeEngine);
+
+  return () => {
+    window.removeEventListener("resize", resizeEngine);
+    engine.stopRenderLoop(renderScene);
+    engine.dispose();
+    canvas.removeEventListener("wheel", noBubble);  
+  };
 }
 
 render(<App />, document.getElementById('app'));
@@ -256,11 +268,13 @@ class Mesh extends MeshG<VData, LData, EData> {
   verticesByName: Record<string, Vertex> = {};
 
   constructor(
-    def: string,
     log: (...args: any[]) => unknown,
     fail: (msg: string) => never,
   ) {
     super(log, fail);
+  }
+
+  setup(def: string) {
     const {verticesByName} = this;
 
     const [innerHE, outerHE] = this.addCore();

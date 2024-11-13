@@ -23,7 +23,7 @@ export function assert(test: boolean) {
   }
 }
 
-export const getLines = (text: string) => text.trim().split(/\r?\n/).flatMap(line => {
+export const getLines = (text: string) => text.trim().split(/\n|\r\n?/).flatMap(line => {
   line = line.trim();
   return line === "" || line.startsWith("//") ? [] : [line];
 })
