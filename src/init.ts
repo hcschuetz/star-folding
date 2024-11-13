@@ -18,11 +18,11 @@ reattachL e d
 // reattachL e f
 reattachL j i
 reattachL i k
-bend2 k c d
-bend2 k d f
-bend2 f g h
-bend2 f h i
-bend2 f k a
-bend2 e f i
-bend2 a b e
+bend2 + k c d
+bend2 + k d f
+bend2 + f g h
+bend2 + f h i
+bend2 + f k a
+bend2 + e f i
+bend2 + a b e
 `;

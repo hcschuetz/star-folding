@@ -445,8 +445,12 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   bend2(args: string[]) {
-    if (args.length !== 3) fail("bend2 expects 3 args");
-    const {loops, verticesByName} = this;
+    if (args.length !== 4) fail("bend2 expects 4 args");
+    const {verticesByName} = this;
+    const choice = args.shift();
+    if (!["+", "-"].includes(choice)) fail(
+      "first arg of bend2 should be '+' or '-'."
+    );
     const argVertices = args.map(name =>
       verticesByName[name] ?? fail(`no such vertex: ${name}`)
     );
@@ -488,16 +492,17 @@ class Mesh extends MeshG<VData, LData, EData> {
       distance(q.d.pos, tip2.d.pos),
       distance(r.d.pos, tip2.d.pos),
     ].map(d => "\n  " + d.toFixed(5)).join(""));
-    const [inters1 /* , inters2 */] = intersect3Spheres(
+    const [inters1 , inters2] = intersect3Spheres(
       p.d.pos, tip1.d.pos,
       q.d.pos, tip1 /* or tip2 */.d.pos,
       r.d.pos, tip2.d.pos,
     );
+    const inters = choice === "+" ? inters2 : inters1;
 
-    log(`rotation ${p}-${q} ${projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos)}[${tip1.d.pos} => ${inters1}]:`, ...beyond_pq);
-    rotatePoints(projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos), tip1.d.pos, inters1, [...beyond_pq].map(v => v.d));
-    log(`rotation ${q}-${r} ${projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos)}[${tip2.d.pos} => ${inters1}]:`, ...beyond_qr);
-    rotatePoints(projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos), tip2.d.pos, inters1, [...beyond_qr].map(v => v.d));
+    log(`rotation ${p}-${q} ${projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos)}[${tip1.d.pos} => ${inters}]:`, ...beyond_pq);
+    rotatePoints(projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos), tip1.d.pos, inters, [...beyond_pq].map(v => v.d));
+    log(`rotation ${q}-${r} ${projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos)}[${tip2.d.pos} => ${inters}]:`, ...beyond_qr);
+    rotatePoints(projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos), tip2.d.pos, inters, [...beyond_qr].map(v => v.d));
     const dist = distance(tip1.d.pos, tip2.d.pos);
     if (dist > 1e-8) fail(
       `vertices ${tip1} ${tip2} to merge too far apart: ${dist}`
