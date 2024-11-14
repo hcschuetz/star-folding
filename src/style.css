@@ -7,7 +7,7 @@ body {
 	padding: 0;
 }
 
-button, textarea, .explanation {
+button, textarea, .explanation, .output {
 	margin: 8px;
 }
 
@@ -25,11 +25,7 @@ summary {
 	}
 }
 
-.phase {
-	padding: 8px;
-
-	canvas {
-		width: 800px;
-		height: 800px;
-	}
+canvas {
+	width: 800px;
+	height: 800px;
 }

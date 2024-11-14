@@ -12,7 +12,7 @@
 			<p>
 				This is an attempt to fold stars into polyhedra.
 				See <a href="https://johncarlosbaez.wordpress.com/2024/10/30/triangulations-of-the-sphere-part-2/" target="_blank">here</a>
-				(and <a href="https://arxiv.org/pdf/math/9801088">here</a>)
+				(and <a href="https://arxiv.org/pdf/math/9801088" target="_blank">here</a>)
 				for a description of the task.
 			</p>
 			<h2>Defining the Star</h2>
@@ -27,7 +27,7 @@
 				contains an edge name and a list of "steps".
 				Each step is given as a number from 1 to 12 corresponding to the
 				directions on a clock dial.
-				(If you don't know what a clock dial is, ask a boomer.)
+				(If you don't know what a clock dial looks like, ask a boomer.)
 			</p>
 			<p>
 				Even numbers go 1 unit in the respective direction.
@@ -40,7 +40,7 @@
 			</p>
 			<p>
 				The example setup below creates the star given in the
-				<a href="https://arxiv.org/pdf/math/9801088">Thurston paper</a>
+				<a href="https://arxiv.org/pdf/math/9801088" target="_blank">Thurston paper</a>
 				at the top of page 540 (= page 30 of the PDF):
 			</p>
 			<ul>
@@ -65,7 +65,7 @@
 			<h3>bend2</h3>
 			<p>
 				One basic operation is to select 3 inner vertices P, Q, and R and
-				to bend the paper along the line segments PQ and QR.
+				to bend the paper along the two line segments PQ and QR.
 				The bending angles are chosen automatically so that
 				the two neighbor vertices of Q will coincide.
 			</p>
@@ -74,7 +74,7 @@
 			</p>
 			<ul>
 				<li>
-					Q is expected to be on the boundary of our current manifold.
+					P, Q, and R are expected to be on the boundary of our current manifold.
 					(Actually the code has been written with the assumption
 					that the boundary at Q is to the right of the chain P->Q->R.
 					If it is on the left, just exchange P and R.)
@@ -165,15 +165,9 @@
 			</p>
 			<h2>Output</h2>
 			<p>
-				To execute our operations, click the "run" button.
-				The current manifold is drawn after the initial setup and after each
-				transformation step.
+				To execute the operations, click the "run" button.
+				Then you can select the step after which you want to see the manifold.
 				(For now only a wireframe is drawn.  Faces are yet to come.)
-			</p>
-			<p>
-				(Update: The "show manifold" must be checked to actually draw the
-				manifold.  Only the checkbox for the last manifold is checked
-				automatically.  This is to reduce the CPU and GPU load.)
 			</p>
 			<p>
 				You can use your mouse to zoom and to rotate the camera around the manifold.
@@ -181,11 +175,11 @@
 				href="https://doc.babylonjs.com/features/featuresDeepDive/cameras/camera_introduction#arc-rotate-camera"
 				target="_blank">here</a>.)
 				To scroll the entire page move the mouse pointer out of the
-				graphics boxes.
+				graphics canvas.
 			</p>
 			<p>
-				Above each graphic display there is a header line.
-				Clicking it opens a bunch of log messages.
+				Below the graphic output the steps are listed again.
+				Clicking a step opens a bunch of log messages.
 				These are intended for myself during development
 				but some of them might be helpful for you as well.
 				For example an exception mentioning a "negative discriminant"

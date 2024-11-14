@@ -1,15 +1,12 @@
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { signal } from '@preact/signals';
-// import * as B from 'babylonjs';
 import * as B from '@babylonjs/core';
 import * as G from "@babylonjs/gui";
 
 import './style.css';
 import { fail, getLines, log, setLogger } from './utils';
-import { closeTo0, distance, E3, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60 } from './geom-utils';
+import { closeTo0, distance, E3, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
 import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
-import { TAU } from './geometric-algebra/utils';
 import { initialActionsDef, initialPolygonDef } from './init';
 
 
@@ -32,6 +29,9 @@ export function App() {
   const actionsDefElem = useRef<HTMLTextAreaElement>();
 
   const [phases, setPhases] = useState<PhaseData[]>([]);
+  const [phaseNo, setPhaseNo] = useState(0);
+  const [showGrid, setShowGrid] = useState(false);
+  const canvas = useRef<HTMLCanvasElement>();
 
   function run() {
     const phasesList: PhaseData[] = [];
@@ -98,10 +98,23 @@ export function App() {
     }
 
     setPhases(phasesList);
+    setPhaseNo(phasesList.length - 1);
   }
 
+  useEffect(() => {
+    if (canvas.current) {
+      const {vertices, vertexNames, edges, triangles} = phases[phaseNo];
+      return renderToCanvas(canvas.current, vertices, vertexNames, edges, triangles, showGrid);
+    }
+  }, [canvas.current, phases, phaseNo, showGrid]);
+
+  useEffect(() => {
+    console.log("CC", canvas.current)
+    canvas.current?.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }, [canvas.current]);
+  
   return (
-    <div>
+    <>
       <textarea ref={polygonDefElem}>
         {initialPolygonDef.trim()}
       </textarea>
@@ -110,56 +123,40 @@ export function App() {
       </textarea>
       <br/>
       <button onClick={run}>run</button>
-      {
-        phases.length > 0 &&
-        <div>
+      {phases.length > 0 &&
+        <div class="output">
           { phases.at(-1).ok
-          ? `${phases.length - 1} transformation(s) succeeded`
-          : `transformation #${phases.length - 1} failed`
+          ? `${phases.length} step${phases.length === 1 ? "" : "s"} succeeded; `
+          : `step #${phases.length} failed; `
           }
+          <label>
+            select step: {}
+            <select onChange={e => setPhaseNo(e.target["value"])}>
+              {phases.map((phaseData, i) => (
+                <option selected={phaseNo === i} value={i}>
+                  {phaseData.logTitle}
+                </option>
+              ))}
+            </select>
+          </label> {}
+          <label>
+            show grid: {}
+            <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target["checked"])}/>
+          </label>
+          <br/>
+          <canvas ref={canvas}/>
+          {phases.map(({ok, logTitle, logText}) => (
+            <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
+              <details open={!ok}>
+                <summary><code>{logTitle}</code></summary>
+                <pre>{logText}</pre>
+              </details>
+            </div>
+          ))}
         </div>
       }
-      {phases.map((phaseData, i) => <Phase phaseData={phaseData} isLast={i + 1 === phases.length}/>)}
-    </div>
+    </>
   );
-}
-
-function Phase(props: {phaseData: PhaseData, isLast: boolean}) {
-  const {
-    logTitle, logText, ok, vertices, vertexNames, edges, triangles
-  } = props.phaseData;
-
-  const [showManifold, setShowManifold] = useState(props.isLast);
-  const [showGrid, setShowGrid] = useState(false);
-  const canvas = useRef<HTMLCanvasElement>();
-
-  useEffect(() => {
-    if (canvas.current) {
-      renderToCanvas(canvas.current, vertices, vertexNames, edges, triangles, showGrid);
-    }
-  }, [canvas.current, showGrid]);
-
-  useEffect(() => {
-    if (props.isLast && canvas.current) {
-      canvas.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      })
-    }
-  }, [canvas.current]);
-
-  return (
-    <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
-      <details open={!ok}>
-        <summary><code>{logTitle}</code></summary>
-        <pre>{logText}</pre>
-      </details>
-      <label><input type="checkbox" checked={showManifold} onChange={e => setShowManifold(e.target["checked"])}/> show manifold</label>
-      <label><input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target["checked"])}/> show grid</label>
-      <br/>
-      {showManifold && <canvas ref={canvas}/>}
-    </div>
-  )
 }
 
 function renderToCanvas(
