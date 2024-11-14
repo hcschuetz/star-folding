@@ -1,7 +1,9 @@
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import * as B from 'babylonjs';
+// import * as B from 'babylonjs';
+import * as B from '@babylonjs/core';
+import * as G from "@babylonjs/gui";
 
 import './style.css';
 import { fail, getLines, log, setLogger } from './utils';
@@ -18,6 +20,7 @@ type PhaseData = {
 
   /** Contains (x,y,z) triplets of coordinates */
   vertices: B.Vector3[],
+  vertexNames: string[],
   /** Contains pairs of vertex indices */
   edges: [number, number][],
   /** Contains triplets of vertex indices */
@@ -52,6 +55,7 @@ export function App() {
           const mv = v.d.pos;
           return new B.Vector3(mv.value("x"), mv.value("y"), mv.value("z"));
         }),
+        vertexNames: vertexArray.map(v => v.name),
         edges: vertexArray.flatMap(v =>
           [...v.neighbors()].map(w =>
             [vertexToIndex.get(v), vertexToIndex.get(w)] as [number, number]
@@ -110,21 +114,31 @@ export function App() {
         phases.length > 0 &&
         <div>
           { phases.at(-1).ok
-          ? `${phases.length - 1} transformation succeeded`
-          : `transformation #${phases.length} failed`
+          ? `${phases.length - 1} transformation(s) succeeded`
+          : `transformation #${phases.length - 1} failed`
           }
         </div>
       }
-      {phases.map((phaseData) => <Phase phaseData={phaseData}/>)}
+      {phases.map((phaseData, i) => <Phase phaseData={phaseData} isLast={i + 1 === phases.length}/>)}
     </div>
   );
 }
 
-function Phase(props: {phaseData: PhaseData}) {
-  const {logTitle, logText, ok, vertices, edges, triangles} = props.phaseData;
+function Phase(props: {phaseData: PhaseData, isLast: boolean}) {
+  const {
+    logTitle, logText, ok, vertices, vertexNames, edges, triangles
+  } = props.phaseData;
   const canvas = useRef<HTMLCanvasElement>();
 
-  useEffect(() => renderToCanvas(canvas.current, vertices, edges, triangles));
+  useEffect(() => {
+    renderToCanvas(canvas.current, vertices, vertexNames, edges, triangles);
+    if (props.isLast) {
+      canvas.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }
+  });
 
   return (
     <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
@@ -140,6 +154,7 @@ function Phase(props: {phaseData: PhaseData}) {
 function renderToCanvas(
   canvas: HTMLCanvasElement,
   vertices: B.Vector3[],
+  vertexNames: string[],
   edges: [number, number][],
   triangles: [number, number, number][],
 ) {
@@ -149,6 +164,10 @@ function renderToCanvas(
   const engine = new B.Engine(canvas, true);
   const scene = new B.Scene(engine);
 
+  const advancedTexture = G.AdvancedDynamicTexture.CreateFullscreenUI("myUI", true, scene);
+  advancedTexture.rootContainer.scaleX = window.devicePixelRatio;
+  advancedTexture.rootContainer.scaleY = window.devicePixelRatio;
+  
   const lineMaterial = new B.StandardMaterial("myMaterial", scene);
   lineMaterial.diffuseColor = B.Color3.Yellow();
 
@@ -166,6 +185,17 @@ function renderToCanvas(
     const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
     ball.position = pos;
     ball.parent = root;
+
+    const labelText = vertexNames[i];
+    if (labelText.length > 2) return;
+    const labelPos = new B.TransformNode("labelPos" + i, scene);
+    labelPos.parent = root;
+    labelPos.position = new B.Vector3(0, .2, 0).addInPlace(pos);
+    const label = new G.TextBlock("label" + i, labelText);
+    label.color = "#fff";
+    label.fontSize = 16;
+    advancedTexture.addControl(label);
+    label.linkWithMesh(labelPos);
   });
   edges.forEach(indices => {
     const line = B.MeshBuilder.CreateTube(`line${indices}`, {
