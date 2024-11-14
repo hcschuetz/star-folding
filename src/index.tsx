@@ -108,11 +108,11 @@ export function App() {
     }
   }, [canvas.current, phases, phaseNo, showGrid]);
 
-  useEffect(() => {
-    console.log("CC", canvas.current)
-    canvas.current?.scrollIntoView({behavior: 'smooth', block: 'center'});
-  }, [canvas.current]);
-  
+  // // This effect is not invoked upon the first canvas creation.  How to fix this?
+  // useEffect(() => {
+  //   canvas.current?.scrollIntoView({behavior: 'smooth', block: 'center'});
+  // }, [canvas.current]);
+
   return (
     <>
       <textarea ref={polygonDefElem}>
