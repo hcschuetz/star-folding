@@ -235,6 +235,8 @@ function renderToCanvas(
   }
 
   const camera = new B.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2, 10, new B.Vector3(0, 0, 0), scene);
+  camera.lowerRadiusLimit = 3;
+  camera.upperRadiusLimit = 30;
   camera.attachControl(canvas, true);
 
   const light = new B.HemisphericLight("light", new B.Vector3(1, 1, 0), scene);
