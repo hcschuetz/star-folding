@@ -104,10 +104,8 @@
 						<li>one part adjacent to both PQ and QR, and</li>
 						<li>one part adjacent tot QR but not to PQ,</li>
 					</ul>
-					All vertices of the first part (including vertex P') are rotated
-					around PQ until P' reaches Q'.
-					Similarly the third part (including R') are rotated
-					around QR until R' reaches Q'.
+					The first part (including vertex P') is rotated around PQ until P' reaches Q'.
+					Similarly the third part (including R') is rotated around QR until R' reaches Q'.
 				<li>
 					The 2 former boundary edges P'Q and QR' are merged into a single
 					non-boundary edge QQ'.
@@ -116,6 +114,8 @@
 					It may happen (not in the first folding step, but possibly later)
 					that the two faces adjacent to QQ' are in the same plane.
 					In this case the edge QQ' is dropped and the two faces are merged.
+					The purpose of this merger is that the merged face provides additional
+					diagonals that can be used in subsequent operations.
 				</li>
 			</ul>
 			<p>
@@ -135,6 +135,7 @@
 				edges adjacent to c will coincide.
 				The snippet is essentially rotated around c as far as needed so that
 				the two neighbors of c along the boundary will coincide.
+				This operation is written as "reattachL b c".
 			</p>
 			<p>
 				The current implementation expects the snippet and the rest to be in
@@ -142,6 +143,10 @@
 				This allows to drop the pasted edge and to merge the two faces.
 				Therefore it is probably best to do perform reattach operations
 				before any bending operations.
+			</p>
+			<p>
+				After a reattach operation there are new diagonals,
+				which can be used in bending operations.
 			</p>
 			<h3>reattachR</h3>
 			<p>
@@ -163,7 +168,12 @@
 				To execute our operations, click the "run" button.
 				The current manifold is drawn after the initial setup and after each
 				transformation step.
-				(For now only a wire frame is drawn.  Faces are yet to come.)
+				(For now only a wireframe is drawn.  Faces are yet to come.)
+			</p>
+			<p>
+				(Update: The "show manifold" must be checked to actually draw the
+				manifold.  Only the checkbox for the last manifold is checked
+				automatically.  This is to reduce the CPU and GPU load.)
 			</p>
 			<p>
 				You can use your mouse to zoom and to rotate the camera around the manifold.

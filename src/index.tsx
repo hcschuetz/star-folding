@@ -128,17 +128,25 @@ function Phase(props: {phaseData: PhaseData, isLast: boolean}) {
   const {
     logTitle, logText, ok, vertices, vertexNames, edges, triangles
   } = props.phaseData;
+
+  const [showManifold, setShowManifold] = useState(props.isLast);
+  const [showGrid, setShowGrid] = useState(false);
   const canvas = useRef<HTMLCanvasElement>();
 
   useEffect(() => {
-    renderToCanvas(canvas.current, vertices, vertexNames, edges, triangles);
-    if (props.isLast) {
+    if (canvas.current) {
+      renderToCanvas(canvas.current, vertices, vertexNames, edges, triangles, showGrid);
+    }
+  }, [canvas.current, showGrid]);
+
+  useEffect(() => {
+    if (props.isLast && canvas.current) {
       canvas.current.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       })
     }
-  });
+  }, [canvas.current]);
 
   return (
     <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
@@ -146,7 +154,10 @@ function Phase(props: {phaseData: PhaseData, isLast: boolean}) {
         <summary><code>{logTitle}</code></summary>
         <pre>{logText}</pre>
       </details>
-      <canvas ref={canvas}/>
+      <label><input type="checkbox" checked={showManifold} onChange={e => setShowManifold(e.target["checked"])}/> show manifold</label>
+      <label><input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target["checked"])}/> show grid</label>
+      <br/>
+      {showManifold && <canvas ref={canvas}/>}
     </div>
   )
 }
@@ -157,6 +168,7 @@ function renderToCanvas(
   vertexNames: string[],
   edges: [number, number][],
   triangles: [number, number, number][],
+  showGrid: boolean,
 ) {
   const noBubble = (e: Event) => e.preventDefault();
   canvas.addEventListener("wheel", noBubble);
@@ -206,17 +218,19 @@ function renderToCanvas(
     line.parent = root;
   });
 
-  for (let i = -12; i < 4; i++) {
-    for (const [skewDown, skewUp] of [[0,0], [0.5, 0.5], [-5,+5], [+5,-5]]) {
-      const line = B.MeshBuilder.CreateTube("grid", {
-        path: [
-          new B.Vector3((i+skewDown)*r3, -5, 0),
-          new B.Vector3((i+skewUp  )*r3, +5, 0),
-        ],
-        radius: 0.005,
-      });
-      line.material = gridMaterial;
-      line.parent = root;
+  if (showGrid) {
+    for (let i = -12; i < 4; i++) {
+      for (const [skewDown, skewUp] of [[0,0], [0.5, 0.5], [-5,+5], [+5,-5]]) {
+        const line = B.MeshBuilder.CreateTube("grid", {
+          path: [
+            new B.Vector3((i+skewDown)*r3, -5, 0),
+            new B.Vector3((i+skewUp  )*r3, +5, 0),
+          ],
+          radius: 0.005,
+        });
+        line.material = gridMaterial;
+        line.parent = root;
+      }
     }
   }
 
