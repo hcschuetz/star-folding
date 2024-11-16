@@ -107,7 +107,7 @@ export function App() {
   }
 
   useEffect(() => {
-    if (canvas.current) {
+    if (canvas.current && phases.length > 0) {
       const {vertices, vertexNames, edges, triangles} = phases[phaseNo];
       return renderToCanvas(
         canvas.current,
@@ -127,78 +127,93 @@ export function App() {
 
   return (
     <>
-      <textarea ref={polygonDefElem}>
-        {initialPolygonDef.trim()}
-      </textarea>
-      <textarea ref={actionsDefElem}>
-        {initialActionsDef.trim()}
-      </textarea>
-      <br/>
-      <button onClick={run}>run</button>
-      {phases.length > 0 &&
-        <div class="output">
-          { phases.at(-1).ok
-          ? `${phases.length} step${phases.length === 1 ? "" : "s"} succeeded; `
-          : `step #${phases.length} failed; `
-          }
-          <label>
-            select step: {}
-            <select onChange={e => setPhaseNo(e.target["value"])}>
-              {phases.map((phaseData, i) => (
-                <option selected={phaseNo === i} value={i}>
-                  {i+1}. {phaseData.logTitle}
-                </option>
-              ))}
-            </select>;
-          </label> {}
-          show... {}
-          <label>
-            vertices:
-            <input type="checkbox"
-              checked={showVertices}
-              onChange={e => setShowVertices(e.target["checked"])}
-            />
-          </label> {}
-          <label>
-            vertex names:
-            <input type="checkbox"
-              checked={showVertexNames}
-              onChange={e => setShowVertexNames(e.target["checked"])}
-            />
-          </label> {}
-          <label>
-            edges:
-            <input type="checkbox"
-              checked={showEdges}
-              onChange={e => setShowEdges(e.target["checked"])}
-            />
-          </label> {}
-          <label>
-            faces:
-            <input type="checkbox"
-              checked={showFaces}
-              onChange={e => setShowFaces(e.target["checked"])}
-            />
-          </label> {}
-          <label>
-            grid:
-            <input type="checkbox"
-              checked={showGrid}
-              onChange={e => setShowGrid(e.target["checked"])}
-            />
-          </label>
+      <div style={{display: "flex"}}>
+        <div style={{width: "fit-content"}}>
+          <textarea ref={polygonDefElem}>
+            {initialPolygonDef.trim()}
+          </textarea>
           <br/>
-          <canvas ref={canvas}/>
-          {phases.map(({ok, logTitle, logText}, i) => (
-            <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
-              <details open={!ok}>
-                <summary><code>{i+1}. {logTitle}</code></summary>
-                <pre>{logText}</pre>
-              </details>
+          <textarea ref={actionsDefElem}>
+            {initialActionsDef.trim()}
+          </textarea>
+          <br/>
+          <button onClick={run}>run</button>
+          {phases.length > 0 && (
+            <div class="display-controls">
+              {
+                phases.at(-1).ok
+                ? `${phases.length} step${phases.length === 1 ? "" : "s"} succeeded`
+                : `Failure at step #${phases.length}`
+              }
+              <br/>
+              <label>
+                Select step:
+                <br/>
+                <select onChange={e => setPhaseNo(e.target["value"])}>
+                  {phases.map((phaseData, i) => (
+                    <option selected={phaseNo === i} value={i}>
+                      {i+1}. {phaseData.logTitle}
+                    </option>
+                  ))}
+                </select>
+              </label> {}
+              <br/>
+              Show...
+              <br/>
+              <label>
+                <input type="checkbox"
+                  checked={showVertices}
+                  onChange={e => setShowVertices(e.target["checked"])}
+                /> {}
+                vertices
+              </label>
+              <br/>
+              <label>
+                <input type="checkbox"
+                  checked={showVertexNames}
+                  onChange={e => setShowVertexNames(e.target["checked"])}
+                /> {}
+                vertex names
+              </label>
+              <br/>
+              <label>
+                <input type="checkbox"
+                  checked={showEdges}
+                  onChange={e => setShowEdges(e.target["checked"])}
+                /> {}
+                edges
+              </label>
+              <br/>
+              <label>
+                <input type="checkbox"
+                  checked={showFaces}
+                  onChange={e => setShowFaces(e.target["checked"])}
+                /> {}
+                faces
+              </label>
+              <br/>
+              <label>
+                <input type="checkbox"
+                  checked={showGrid}
+                  onChange={e => setShowGrid(e.target["checked"])}
+                /> {}
+                grid
+              </label>
             </div>
-          ))}
+          )}
         </div>
-      }
+        <canvas ref={canvas}/>
+      </div>
+      <div class="output" style={{width: "fit-content"}}>
+        {phases.map(({ok, logTitle, logText}, i) => (
+          <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
+            <details open={!ok}>
+              <summary><code>{i+1}. {logTitle}</code></summary>
+              <pre>{logText}</pre>
+            </details>
+          </div>
+        ))}
+      </div>
     </>
   );
 }
@@ -225,6 +240,12 @@ function renderToCanvas(
   advancedTexture.rootContainer.scaleX = window.devicePixelRatio;
   advancedTexture.rootContainer.scaleY = window.devicePixelRatio;
   
+  const tipMaterial = new B.StandardMaterial("myMaterial", scene);
+  tipMaterial.diffuseColor = B.Color3.Blue();
+
+  const innerMaterial = new B.StandardMaterial("myMaterial", scene);
+  innerMaterial.diffuseColor = B.Color3.Red();
+
   const lineMaterial = new B.StandardMaterial("myMaterial", scene);
   lineMaterial.diffuseColor = B.Color3.Green();
 
@@ -251,6 +272,7 @@ function renderToCanvas(
       const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
       ball.position = pos;
       ball.parent = root;
+      ball.material = vertexNames[i].length > 2 ? tipMaterial : innerMaterial;
     });
   }
   if (showVertexNames) {
