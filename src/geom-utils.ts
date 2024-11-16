@@ -1,8 +1,10 @@
-import { Multivector } from "./geometric-algebra/Algebra";
+import { Algebra, Multivector } from "./geometric-algebra/Algebra";
+import { makeLetterNames } from "./geometric-algebra/componentNaming";
 import { B, baseToRepr, makeSphere, R, reprToBase, splitPointPair } from "./geometric-algebra/conformal";
+import NumericBackEnd from "./geometric-algebra/NumericBackEnd";
 import { assert, log } from "./utils";
 
-export { B as E3 };
+export { B as XYZ };
 export type MV = Multivector<never>;
 
 export const closeTo0 = (mv: MV) =>

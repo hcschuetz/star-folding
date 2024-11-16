@@ -27,3 +27,23 @@ export const getLines = (text: string) => text.trim().split(/\n|\r\n?/).flatMap(
   line = line.trim();
   return line === "" || line.startsWith("//") ? [] : [line];
 })
+
+
+export function choose<T>(objects: T[], n: number) {
+  const result: T[][] = [];
+  function recur(start: number, collected: T[]) {
+    if (collected.length === n) {
+      result.push(collected);
+    } else {
+      const limit = objects.length - (n - collected.length);
+      for (let i = start; i <= limit; i++) {
+        recur(i + 1, [...collected, objects[i]]);
+      }
+    }
+  }
+  recur(0, []);
+  return result;
+}
+
+export const count = (iter: IteratorObject<any>): number =>
+  iter.reduce(n => n+1, 0);

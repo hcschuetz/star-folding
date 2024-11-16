@@ -1,14 +1,19 @@
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import * as B from '@babylonjs/core';
+import { Vector3 as V3 } from '@babylonjs/core';
 import * as G from "@babylonjs/gui";
 
 import './style.css';
-import { fail, getLines, log, setLogger } from './utils';
-import { closeTo0, distance, E3, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
+import { choose, count, fail, getLines, log, setLogger } from './utils';
+import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
 import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
 import { initialActionsDef, initialPolygonDef } from './init';
+import triangulate from './triangulate';
 
+const v3 = (...args: number[]) => new V3(...args);
+const mvToV3 = (mv: MV) => v3(mv.value("x"), mv.value("y"), mv.value("z"));
+const vtxToV3 = (v: Vertex) => mvToV3(v.d.pos);
 
 type PhaseData = {
   logTitle: string;
@@ -16,12 +21,10 @@ type PhaseData = {
   ok: boolean;
 
   /** Contains (x,y,z) triplets of coordinates */
-  vertices: B.Vector3[],
+  vertices: V3[],
   vertexNames: string[],
-  /** Contains pairs of vertex indices */
-  edges: [number, number][],
-  /** Contains triplets of vertex indices */
-  triangles: [number, number, number][],
+  edges: [V3, V3][],
+  triangles: V3[][],
 }
 
 export function App() {
@@ -30,6 +33,10 @@ export function App() {
 
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
+  const [showVertices, setShowVertices] = useState(true);
+  const [showVertexNames, setShowVertexNames] = useState(true);
+  const [showEdges, setShowEdges] = useState(true);
+  const [showFaces, setShowFaces] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
   const canvas = useRef<HTMLCanvasElement>();
 
@@ -47,21 +54,19 @@ export function App() {
     let mesh = new Mesh(log, fail);
 
     function emitPhase(logTitle: string) {
-      const vertexArray = [...mesh.vertices];
-      const vertexToIndex = new Map(vertexArray.map((v, i) => [v, i]));
+      const {vertices, loops} = mesh;
       phasesList.push({
         logTitle, logText, ok,
-        vertices: vertexArray.map(v => {
-          const mv = v.d.pos;
-          return new B.Vector3(mv.value("x"), mv.value("y"), mv.value("z"));
-        }),
-        vertexNames: vertexArray.map(v => v.name),
-        edges: vertexArray.flatMap(v =>
-          [...v.neighbors()].map(w =>
-            [vertexToIndex.get(v), vertexToIndex.get(w)] as [number, number]
-          ).filter(([i, j]) => i <= j)
-        ),
-        triangles: [], // TODO fill with data
+        vertices: vertices.values().map(vtxToV3).toArray(),
+        vertexNames: vertices.values().map(v => v.name).toArray(),
+        edges: vertices.values().flatMap(v =>
+          v.neighbors().filter(w => v.id <= w.id)
+          .map(w => [vtxToV3(v), vtxToV3(w)] as [V3, V3])
+        ).toArray(),
+        triangles: loops.values().filter(l => l.d.isFace).flatMap(l =>
+          triangulate(l.vertices().map(v => v.d.pos).toArray())
+          .map(triangle => triangle.map(mvToV3))
+        ).toArray(),
       });
     }
 
@@ -79,7 +84,7 @@ export function App() {
         emitPhase("initialize")
       }
 
-      for (let line of getLines(actionsDef)) {
+      for (const line of getLines(actionsDef)) {
         logText = "";
         try {
           const [cmd, ...args] = line.trim().split(/\s+/);
@@ -104,9 +109,16 @@ export function App() {
   useEffect(() => {
     if (canvas.current) {
       const {vertices, vertexNames, edges, triangles} = phases[phaseNo];
-      return renderToCanvas(canvas.current, vertices, vertexNames, edges, triangles, showGrid);
+      return renderToCanvas(
+        canvas.current,
+        vertices, vertexNames, edges, triangles,
+        showVertices, showVertexNames, showEdges, showFaces, showGrid,
+      );
     }
-  }, [canvas.current, phases, phaseNo, showGrid]);
+  }, [
+    canvas.current, phases, phaseNo,
+    showVertices, showVertexNames, showEdges, showFaces, showGrid,
+  ]);
 
   // // This effect is not invoked upon the first canvas creation.  How to fix this?
   // useEffect(() => {
@@ -134,21 +146,53 @@ export function App() {
             <select onChange={e => setPhaseNo(e.target["value"])}>
               {phases.map((phaseData, i) => (
                 <option selected={phaseNo === i} value={i}>
-                  {phaseData.logTitle}
+                  {i+1}. {phaseData.logTitle}
                 </option>
               ))}
-            </select>
+            </select>;
+          </label> {}
+          show... {}
+          <label>
+            vertices:
+            <input type="checkbox"
+              checked={showVertices}
+              onChange={e => setShowVertices(e.target["checked"])}
+            />
           </label> {}
           <label>
-            show grid: {}
-            <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target["checked"])}/>
+            vertex names:
+            <input type="checkbox"
+              checked={showVertexNames}
+              onChange={e => setShowVertexNames(e.target["checked"])}
+            />
+          </label> {}
+          <label>
+            edges:
+            <input type="checkbox"
+              checked={showEdges}
+              onChange={e => setShowEdges(e.target["checked"])}
+            />
+          </label> {}
+          <label>
+            faces:
+            <input type="checkbox"
+              checked={showFaces}
+              onChange={e => setShowFaces(e.target["checked"])}
+            />
+          </label> {}
+          <label>
+            grid:
+            <input type="checkbox"
+              checked={showGrid}
+              onChange={e => setShowGrid(e.target["checked"])}
+            />
           </label>
           <br/>
           <canvas ref={canvas}/>
-          {phases.map(({ok, logTitle, logText}) => (
+          {phases.map(({ok, logTitle, logText}, i) => (
             <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
               <details open={!ok}>
-                <summary><code>{logTitle}</code></summary>
+                <summary><code>{i+1}. {logTitle}</code></summary>
                 <pre>{logText}</pre>
               </details>
             </div>
@@ -161,10 +205,14 @@ export function App() {
 
 function renderToCanvas(
   canvas: HTMLCanvasElement,
-  vertices: B.Vector3[],
+  vertices: V3[],
   vertexNames: string[],
-  edges: [number, number][],
-  triangles: [number, number, number][],
+  edges: [V3, V3][],
+  triangles: V3[][],
+  showVertices: boolean,
+  showVertexNames: boolean,
+  showEdges: boolean,
+  showFaces: boolean,
   showGrid: boolean,
 ) {
   const noBubble = (e: Event) => e.preventDefault();
@@ -178,50 +226,73 @@ function renderToCanvas(
   advancedTexture.rootContainer.scaleY = window.devicePixelRatio;
   
   const lineMaterial = new B.StandardMaterial("myMaterial", scene);
-  lineMaterial.diffuseColor = B.Color3.Yellow();
+  lineMaterial.diffuseColor = B.Color3.Green();
+
+  const faceMaterial = new B.StandardMaterial("myMaterial", scene);
+  faceMaterial.diffuseColor = B.Color3.Yellow();
+  faceMaterial.roughness = 100;
+  faceMaterial.transparencyMode = B.Material.MATERIAL_ALPHABLEND;
+  faceMaterial.alpha = 0.3;
+  faceMaterial.sideOrientation = B.VertexData.DOUBLESIDE;
+  faceMaterial.backFaceCulling = false;
 
   const gridMaterial = new B.StandardMaterial("myMaterial", scene);
   gridMaterial.diffuseColor = B.Color3.Black();
 
   const center = vertices
-    .reduce((acc, v) => acc.addInPlace(v), B.Vector3.Zero())
+    .reduce((acc, v) => acc.addInPlace(v), V3.Zero())
     .scaleInPlace(1 / vertices.length);
 
   const root = new B.TransformNode("root", scene);
   root.position = center.negate();
 
-  vertices.forEach((pos, i) => {
-    const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
-    ball.position = pos;
-    ball.parent = root;
-
-    const labelText = vertexNames[i];
-    if (labelText.length > 2) return;
-    const labelPos = new B.TransformNode("labelPos" + i, scene);
-    labelPos.parent = root;
-    labelPos.position = new B.Vector3(0, .2, 0).addInPlace(pos);
-    const label = new G.TextBlock("label" + i, labelText);
-    label.color = "#fff";
-    label.fontSize = 16;
-    advancedTexture.addControl(label);
-    label.linkWithMesh(labelPos);
-  });
-  edges.forEach(indices => {
-    const line = B.MeshBuilder.CreateTube(`line${indices}`, {
-      path: indices.map(i => vertices[i]),
-      radius: .02,
+  if (showVertices) {
+    vertices.forEach((pos, i) => {
+      const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
+      ball.position = pos;
+      ball.parent = root;
     });
-    line.material = lineMaterial;
-    line.parent = root;
-  });
+  }
+  if (showVertexNames) {
+    vertices.forEach((pos, i) => {
+      const labelText = vertexNames[i];
+      if (labelText.length > 2) return;
+      const labelPos = new B.TransformNode("labelPos" + i, scene);
+      labelPos.parent = root;
+      labelPos.position = v3(0, .2, 0).addInPlace(pos);
+      const label = new G.TextBlock("label" + i, labelText);
+      label.color = "#fff";
+      label.fontSize = 16;
+      advancedTexture.addControl(label);
+      label.linkWithMesh(labelPos);
+    });
+  }
+  if (showEdges) {
+    edges.forEach((path, i) => {
+      const line = B.MeshBuilder.CreateTube("line" + i, {path, radius: .02});
+      line.material = lineMaterial;
+      line.parent = root;
+    });
+  }
+  if (showFaces) {
+    triangles.forEach((triangle, i) => {
+      const mesh = new B.Mesh("triangle" + i, scene);
+      const vertexData = new B.VertexData();
+      vertexData.positions = triangle.flatMap(v => v.asArray());
+      vertexData.indices = [0,1,2];
+      vertexData.applyToMesh(mesh);
+      mesh.material = faceMaterial;
+      mesh.parent = root;
+    });
+  }
 
   if (showGrid) {
     for (let i = -12; i < 4; i++) {
       for (const [skewDown, skewUp] of [[0,0], [0.5, 0.5], [-5,+5], [+5,-5]]) {
         const line = B.MeshBuilder.CreateTube("grid", {
           path: [
-            new B.Vector3((i+skewDown)*r3, -5, 0),
-            new B.Vector3((i+skewUp  )*r3, +5, 0),
+            v3((i+skewDown)*r3, -5, 0),
+            v3((i+skewUp  )*r3, +5, 0),
           ],
           radius: 0.005,
         });
@@ -231,13 +302,32 @@ function renderToCanvas(
     }
   }
 
-  const camera = new B.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2, 10, new B.Vector3(0, 0, 0), scene);
+  const camera = new B.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2, 10, v3(0, 0, 0), scene);
   camera.lowerRadiusLimit = 3;
   camera.upperRadiusLimit = 30;
   camera.attachControl(canvas, true);
 
-  const light = new B.HemisphericLight("light", new B.Vector3(1, 1, 0), scene);
-  light.intensity = 3;
+  [
+    [v3( 10,  10,   0)],
+    [v3(-10, -10,  10)],
+    [v3(-10,   0, -10)],
+    [v3(  0, -10, -10)],
+    [v3( 10,   0,  10)],
+    [v3( 10,   0,   0)],
+  ].forEach(([pos], i) => {
+    const l = new B.PointLight("light" + i, pos, scene);
+    l.radius = 5;
+  });
+
+  if (false) [[1,0,0], [0,1,0], [0,0,1]].forEach(([x,y,z], i) => {
+    const axis = B.MeshBuilder.CreateTube("axis" + i, {
+      path: [new V3(), new V3(x,y,z).scaleInPlace(5)],
+      radius: 0.02,
+    }, scene);
+    const material = new B.StandardMaterial("axisMat" + i, scene);
+    material.diffuseColor = new B.Color3(x,y,z);
+    axis.material = material;
+  });
 
   const renderScene = () => scene.render()
   engine.runRenderLoop(renderScene);
@@ -260,18 +350,18 @@ render(<App />, document.getElementById('app'));
 const r3 = Math.sqrt(3), r3half = r3 / 2;
 
 const steps = {
-  "12": E3.vec([ 0 * r3half,  2 / 2, 0]),
-   "1": E3.vec([ 1 * r3half,  3 / 2, 0]),
-   "2": E3.vec([ 1 * r3half,  1 / 2, 0]),
-   "3": E3.vec([ 2 * r3half,  0 / 2, 0]),
-   "4": E3.vec([ 1 * r3half, -1 / 2, 0]),
-   "5": E3.vec([ 1 * r3half, -3 / 2, 0]),
-   "6": E3.vec([ 0 * r3half, -2 / 2, 0]),
-   "7": E3.vec([-1 * r3half, -3 / 2, 0]),
-   "8": E3.vec([-1 * r3half, -1 / 2, 0]),
-   "9": E3.vec([-2 * r3half,  0 / 2, 0]),
-  "10": E3.vec([-1 * r3half,  1 / 2, 0]),
-  "11": E3.vec([-1 * r3half,  3 / 2, 0]),
+  "12": XYZ.vec([ 0 * r3half,  2 / 2, 0]),
+   "1": XYZ.vec([ 1 * r3half,  3 / 2, 0]),
+   "2": XYZ.vec([ 1 * r3half,  1 / 2, 0]),
+   "3": XYZ.vec([ 2 * r3half,  0 / 2, 0]),
+   "4": XYZ.vec([ 1 * r3half, -1 / 2, 0]),
+   "5": XYZ.vec([ 1 * r3half, -3 / 2, 0]),
+   "6": XYZ.vec([ 0 * r3half, -2 / 2, 0]),
+   "7": XYZ.vec([-1 * r3half, -3 / 2, 0]),
+   "8": XYZ.vec([-1 * r3half, -1 / 2, 0]),
+   "9": XYZ.vec([-2 * r3half,  0 / 2, 0]),
+  "10": XYZ.vec([-1 * r3half,  1 / 2, 0]),
+  "11": XYZ.vec([-1 * r3half,  3 / 2, 0]),
 };
 
 
@@ -291,16 +381,23 @@ function isBetweenCoplanarLoops(he: HalfEdge): boolean {
     [...new Set<Vertex>([...he.loop.vertices(), ...he.twin.loop.vertices()])];
   const nVertices = vertices.length;
 
+  // A shorter version using choose:
+  // for (const [p,q,r,s] of choose(vertices.map(v => v.d.pos), 4)) {
+  //   if (!closeTo0(XYZ.wedgeProduct(XYZ.minus(q, p), XYZ.minus(r, p), XYZ.minus(s, p)))) {
+  //     return false;
+  //   }
+  // }
+
   for (let i = 0; i < nVertices - 3; i++) {
     const base = vertices[i].d.pos;
     for (let j = i + 1; j < nVertices - 2; j++) {
-      const len_ij = E3.minus(vertices[j].d.pos, base);
+      const len_ij = XYZ.minus(vertices[j].d.pos, base);
       if (closeTo0(len_ij)) break; // (*)
       for (let k = j + 1; k < nVertices - 1; k++) {
-        const area_ijk = E3.wedgeProduct(len_ij, E3.minus(vertices[k].d.pos, base));
+        const area_ijk = XYZ.wedgeProduct(len_ij, XYZ.minus(vertices[k].d.pos, base));
         if (closeTo0(area_ijk)) break; // (*)
         for (let l = k + 1; l < nVertices; l++) {
-          const vol_ijkl = E3.wedgeProduct(area_ijk, E3.minus(vertices[l].d.pos, base));
+          const vol_ijkl = XYZ.wedgeProduct(area_ijk, XYZ.minus(vertices[l].d.pos, base));
           if (closeTo0(vol_ijkl)) break;
           return false;
         }
@@ -327,20 +424,20 @@ class Mesh extends MeshG<VData, LData, EData> {
     const [innerHE, outerHE] = this.addCore();
     Object.assign(innerHE.loop, {name: "star"      , d: {isFace: true }});
     Object.assign(outerHE.loop, {name: "outerspace", d: {isFace: false}});
-    Object.assign(innerHE.to, {name: "dummy", d: {pos: E3.vec([0, 0, 0])}});
+    Object.assign(innerHE.to, {name: "dummy", d: {pos: XYZ.vec([0, 0, 0])}});
     this.logMesh();
     this.checkWithData();
 
-    let currentPos = E3.vec([0, 0, 0]);
+    let currentPos = XYZ.vec([0, 0, 0]);
     let tips: Vertex[] = [];
 
-    for (let line of getLines(def)) {
+    for (const line of getLines(def)) {
       const [name, ...moves] = line.split(/\s+/);
       const fromPos = currentPos;
       for (const move of moves) {
-        currentPos = E3.plus(currentPos, steps[move] ?? fail(`unknown step: ${move}`))
+        currentPos = XYZ.plus(currentPos, steps[move] ?? fail(`unknown step: ${move}`))
       }
-      const innerPos = E3.plus(fromPos, rotXY60(E3.minus(currentPos, fromPos)));
+      const innerPos = XYZ.plus(fromPos, rotXY60(XYZ.minus(currentPos, fromPos)));
 
       const [innerHE0, outerHE0] = this.splitEdgeAcross(outerHE);  
       const tip = innerHE0.from;
@@ -355,7 +452,7 @@ class Mesh extends MeshG<VData, LData, EData> {
       verticesByName[inward.name] = inward;
     }
 
-    if (E3.normSquared(currentPos) > 1e-12) fail(
+    if (XYZ.normSquared(currentPos) > 1e-12) fail(
       `polygon not closed; offset: ${JSON.stringify(currentPos)}`
     );
 
@@ -383,10 +480,10 @@ class Mesh extends MeshG<VData, LData, EData> {
           const v1 = array[(i + 1) % array.length];
           const v2 = array[(i + 2) % array.length];
           const v3 = array[(i + 3) % array.length];
-          const vol = E3.wedgeProduct(
-            E3.minus(v1.d.pos, v.d.pos),
-            E3.minus(v2.d.pos, v.d.pos),
-            E3.minus(v3.d.pos, v.d.pos),
+          const vol = XYZ.wedgeProduct(
+            XYZ.minus(v1.d.pos, v.d.pos),
+            XYZ.minus(v2.d.pos, v.d.pos),
+            XYZ.minus(v3.d.pos, v.d.pos),
           );
           if (!closeTo0(vol)) {
             fail(`face ${loop} not flat (${vol}; ${vol.value("xyz")}): ${
@@ -428,19 +525,13 @@ class Mesh extends MeshG<VData, LData, EData> {
         "faces:", [...v.loops()].join(" "),
       );
     }
-    const vertexArray = [...vertices];
-    const nVertices = vertexArray.length;
-    for (let i = 0; i < nVertices - 1; i++) {
-      const vi = vertexArray[i];
-      for (let j = i + 1; j < nVertices; j++) {
-        const vj = vertexArray[j];
-        const dist = distance(vi.d.pos, vj.d.pos);
-        if (dist < 1e-4) log(`Nearby: ${vi}, ${vj} (${dist})`);
-      }
+    for (const [vi, vj] of choose([...vertices], 2)) {
+      const dist = distance(vi.d.pos, vj.d.pos);
+      if (dist < 1e-4) log(`Nearby: ${vi}, ${vj} (${dist})`);
     }
     log(`${
       vertices.size} vertices (${
-      [...vertices].filter(v => v.name.includes("^")).length} tips), ${
+      count(vertices.values().filter(v => v.name.includes("^")))} tips), ${
       loops.size} loops (${
       [...loops].filter(l => l.d.isFace).length
     } faces)`);
@@ -451,12 +542,12 @@ class Mesh extends MeshG<VData, LData, EData> {
         if (!he.twin.loop.d.isFace) continue;
         if (he.from.name > he.to.name) continue; // avoid duplicate output
         // TODO compute a directed angle (as seen when looking along the half-edge)?
-        const angle = E3.getAngle(
-          E3.normalize(E3.minus(
+        const angle = XYZ.getAngle(
+          XYZ.normalize(XYZ.minus(
             he.next.to.d.pos,
             projectPointToLine(he.next.to.d.pos, he.from.d.pos, he.to.d.pos),
           )),
-          E3.normalize(E3.minus(
+          XYZ.normalize(XYZ.minus(
             he.twin.next.to.d.pos,
             projectPointToLine(he.twin.next.to.d.pos, he.from.d.pos, he.to.d.pos),
           )),
