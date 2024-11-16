@@ -1,4 +1,3 @@
-import { XYZ } from "./geom-utils";
 import { Algebra, Multivector } from "./geometric-algebra/Algebra";
 import { makeLetterNames } from "./geometric-algebra/componentNaming";
 import NumericBackEnd from "./geometric-algebra/NumericBackEnd";
@@ -20,10 +19,14 @@ const orientation = (p: MV, q: MV, r: MV) =>
 /** Is s inside triangle (p,q,r)? */
 const contains = (p: MV, q: MV, r: MV, s: MV): boolean => {
   const pqr = orientation(p, q, r);
+  const sqr = orientation(s, q, r);
+  const psr = orientation(p, s, r);
+  const pqs = orientation(p, q, s);
   return (
-    orientation(s, q, r) === pqr &&
-    orientation(p, s, r) === pqr &&
-    orientation(p, q, s) === pqr
+    // Consider "on the edge" (=== 0) to be inside:
+    (sqr === pqr || sqr === 0) &&
+    (psr === pqr || psr === 0) &&
+    (pqs === pqr || pqs === 0)
   );
 }
 
@@ -42,7 +45,7 @@ type VTX = {
  */
 export default function triangulate(polygon3: MV[]) {
   // 1. Map our polygon from 3D to 2D, where the actual triangulation
-  //    algorithm works.
+  // algorithm works.
   // 1.1 Determine the bounding box
   let xMin: number, yMin: number, zMin: number,
       xMax: number, yMax: number, zMax: number;
@@ -57,14 +60,17 @@ export default function triangulate(polygon3: MV[]) {
     Object.entries(spans).sort(([c1, s1], [c2, s2]) => s2 - s1);
 
   // 1.3 Map the polygon to the coordinate plane spanned by these two axes.
-  //     For convenience we also keep the 3D vertex and the primary-axis value u.
+  // (The only important thing about the bounding-box approach is that it
+  // avoids a projection along the plane of the polygon, which would make
+  // the polygon degenerate.)
+  // For convenience we also keep the 3D vertex and the primary-axis value u.
   const polygon: VTX[] = polygon3.map(v3 => {
     const u = v3.value(primary), v = v3.value(secondary);
     return {v3, v2: UV.vec([u, v]), u, i: -1 /* not yet used */};
   });
 
   /** 2. Triangles will be collected here. (The inner arrays will have 3 elements.) */
-  const result: MV[][] = [];
+  const triangles: VTX[][] = [];
 
   /** 3. Recursively subdivide the polygon. */
   function recur(subPoly: VTX[]) {
@@ -75,7 +81,7 @@ export default function triangulate(polygon3: MV[]) {
         return; // or fail?
       case 3: {
         // We have reached a triangle. Emit and stop the recursion.
-        result.push(subPoly.map(s => s.v3));
+        triangles.push(subPoly);
         return;
       }
       default: {
@@ -100,7 +106,7 @@ export default function triangulate(polygon3: MV[]) {
         if (inCandidate.length === 0) {
           // [prev, current, next] is actually an ear.
           // Cut it off and continue with the remaining polygon.
-          result.push([prev.v3, current.v3, next.v3]);
+          triangles.push([prev, current, next]);
           recur([prev, next, ...rest]);
         } else {
           // [prev, current, next] is not an ear.
@@ -110,7 +116,7 @@ export default function triangulate(polygon3: MV[]) {
           // with the highest u value.
           let iMax2 =
             inCandidate.reduce((acc, elem) => acc.u > elem.u ? acc : elem).i;
-          // Cut the polygon between `current` and `vMax2`.  (By construction
+          // Cut the polygon from `current` to `vMax2`.  (By construction
           // the cut is along a diagonal which cannot intersect any other edge.)
           // Handle the two sub-polygons recursively.
           recur([current, next, ...rest.slice(0, iMax2 + 1)]);
@@ -123,6 +129,20 @@ export default function triangulate(polygon3: MV[]) {
   // 4. Start the recursion
   recur(polygon);
 
-  // 5. Return the collected triangles
-  return result;
+  // Consistency check:
+  assert(Math.abs(triangles.reduce((rest, ta) => rest - area(ta), area(polygon))) < 1e-8);
+
+  // 5. Return the collected triangles in 3D
+  return triangles.map(triangle => triangle.map(vtx => vtx.v3));
+}
+
+function area(poly: VTX[]) {
+  const [first, second, ...rest] = poly.map(vtx => vtx.v2);
+  let sum = 0;
+  let prev = second;
+  for (const current of rest) {
+    sum += UV.wedgeProduct(UV.minus(prev, first), UV.minus(current, first)).value("uv");
+    prev = current;
+  }
+  return sum / 2;
 }

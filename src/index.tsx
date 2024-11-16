@@ -254,6 +254,7 @@ function renderToCanvas(
   faceMaterial.roughness = 100;
   faceMaterial.transparencyMode = B.Material.MATERIAL_ALPHABLEND;
   faceMaterial.alpha = 0.3;
+  // faceMaterial.wireframe = true;
   faceMaterial.sideOrientation = B.VertexData.DOUBLESIDE;
   faceMaterial.backFaceCulling = false;
 
