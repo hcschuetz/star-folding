@@ -120,10 +120,7 @@ export function App() {
     showVertices, showVertexNames, showEdges, showFaces, showGrid,
   ]);
 
-  // // This effect is not invoked upon the first canvas creation.  How to fix this?
-  // useEffect(() => {
-  //   canvas.current?.scrollIntoView({behavior: 'smooth', block: 'center'});
-  // }, [canvas.current]);
+  useEffect(run, []);
 
   return (
     <>
