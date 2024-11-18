@@ -25,4 +25,5 @@ bend2 + f h i
 bend2 + f k a
 bend2 + e f i
 bend2 + a b e
+reattachL j' a
 `;

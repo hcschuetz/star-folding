@@ -5,7 +5,7 @@ import { Vector3 as V3 } from '@babylonjs/core';
 import * as G from "@babylonjs/gui";
 
 import './style.css';
-import { choose, count, fail, getLines, log, setLogger } from './utils';
+import { assert, choose, count, fail, getLines, log, setLogger } from './utils';
 import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
 import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
 import { initialActionsDef, initialPolygonDef } from './init';
@@ -18,7 +18,7 @@ const vtxToV3 = (v: Vertex) => mvToV3(v.d.pos);
 type PhaseData = {
   logTitle: string;
   logText: string;
-  ok: boolean;
+  error?: string;
 
   /** Contains (x,y,z) triplets of coordinates */
   vertices: V3[],
@@ -47,23 +47,26 @@ export function App() {
     const actionsDef = actionsDefElem.current.value;
 
     let logText = "";
-    let ok = true;
+    let error = null;
     const log = (...args: any[]) => { logText += args.join(" ") + "\n"; };
     setLogger(log);
     const fail = (msg: string) => { throw new Error("FAILED: " + msg); };
     let mesh = new Mesh(log, fail);
 
     function emitPhase(logTitle: string) {
+      console.log("emitting phase:", logTitle);
       const {vertices, loops} = mesh;
       phasesList.push({
-        logTitle, logText, ok,
+        logTitle, logText, error,
         vertices: vertices.values().map(vtxToV3).toArray(),
         vertexNames: vertices.values().map(v => v.name).toArray(),
         edges: vertices.values().flatMap(v =>
           v.neighbors().filter(w => v.id <= w.id)
           .map(w => [vtxToV3(v), vtxToV3(w)] as [V3, V3])
         ).toArray(),
-        triangles: loops.values().filter(l => l.d.isFace).flatMap(l =>
+        // There is a ? before .isFace to be a bit more resilient
+        // when invoked after an exception:
+        triangles: loops.values().filter(l => l.d?.isFace).flatMap(l =>
           triangulate(l.vertices().map(v => v.d.pos).toArray())
           .map(triangle => triangle.map(mvToV3))
         ).toArray(),
@@ -76,7 +79,7 @@ export function App() {
         mesh.logMesh();
         mesh.checkWithData();
       } catch (e) {
-        ok = false;
+        error = e.toString();
         log("CAUGHT EXCEPTION:", e);
         break createPhases;
       }
@@ -93,7 +96,7 @@ export function App() {
           mesh.logMesh();
           mesh.checkWithData();
         } catch (e) {
-          ok = false;
+          error = e.toString();
           log("CAUGHT EXCEPTION:", e);
           break createPhases;
         } finally {
@@ -138,9 +141,13 @@ export function App() {
           {phases.length > 0 && (
             <div class="display-controls">
               {
-                phases.at(-1).ok
-                ? `${phases.length} step${phases.length === 1 ? "" : "s"} succeeded`
-                : `Failure at step #${phases.length}`
+                phases.at(-1).error
+                ? (
+                  <details>
+                    <summary>Failure at step #{phases.length}</summary>
+                    {phases.at(-1).error}
+                  </details>)
+                : `${phases.length} step${phases.length === 1 ? "" : "s"} succeeded`
               }
               <br/>
               <label>
@@ -202,9 +209,9 @@ export function App() {
         <canvas ref={canvas}/>
       </div>
       <div class="output" style={{width: "fit-content"}}>
-        {phases.map(({ok, logTitle, logText}, i) => (
-          <div className="phase" style={`background: #${ok ? "efe" : "fee"};`}>
-            <details open={!ok}>
+        {phases.map(({error, logTitle, logText}, i) => (
+          <div className="phase" style={`background: #${error ? "fee" : "efe"};`}>
+            <details open={Boolean(error)}>
               <summary><code>{i+1}. {logTitle}</code></summary>
               <pre>{logText}</pre>
             </details>
@@ -477,6 +484,7 @@ class Mesh extends MeshG<VData, LData, EData> {
     );
 
     // remove dummy node
+    delete verticesByName[outerHE.from.name]
     this.contractEdge(outerHE);
 
     tips.forEach(tip => {
@@ -703,12 +711,14 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   reattachL(args: string[]) {
-    const {loops, verticesByName} = this;
+    const {verticesByName} = this;
 
     if (args.length !== 2) fail(`reattachL expects 2 args`);
     const [pName, qName] = args;
+    log("vertex names:", Object.keys(verticesByName));
+    log("vertices:", this.vertices.values().map(v => v.name).toArray().join(", "));
     const p = verticesByName[pName] ?? fail(`no such vertex: ${pName}`);
-    const q = verticesByName[qName] ?? fail(`no such vertexx: ${qName}`);
+    const q = verticesByName[qName] ?? fail(`no such vertex: ${qName}`);
     const face = findUniqueFace(p, q);
     log(`cut ${face} along new edge ${p} - ${q} and re-attach it`);
 
@@ -718,24 +728,67 @@ class Mesh extends MeshG<VData, LData, EData> {
 
     const [he_qp1, he_pq1] = this.splitLoop(he_pq, he_face_p, {create: "left"});
     const [he_pNew_p, he_p_pNew] = this.splitVertex(he_face_p.twin.prev, he_qp1, {create: "left"});
-    he_p_pNew.to.name = p.name + "'";
-    he_p_pNew.to.d = {pos: p.d.pos};
+    const pNew = he_p_pNew.to;
+    pNew.name = p.name + "'";
+    pNew.d = {pos: p.d.pos};
+    verticesByName[pNew.name] = pNew;
     this.dropEdge(he_p_pNew);
 
+    const t1 = he_face_q.from;
+    const t2 = he_face_q.twin.prev.from;
+
+    const beyond_pq =
+      [...collectVertices(t1, new Set([p, q]))].map(v => v.d);
+
+      assert(beyond_pq.includes(pNew.d));
+      assert(beyond_pq.includes(t1.d));
+      // TODO Should this hold?:
+      // assert(!beyond_pq.includes(t2.d));
+
+    // q is not moved by reattachment.  So it is already in the right place.
+    // pNew has already got its new position.
+    // The following rotation of the snippet vertices ensures
+    // - that edges q-t1 and q-t2 coincide and
+    // - that the snippet fits with q and pNew (instead of p):
+    rotatePoints(q.d.pos, t1.d.pos, t2.d.pos, beyond_pq);
+    // But still the two faces behind q-t1 and q-t2 might not be in a plane.
+    // So we perform another rotation of the snippet around the newly
+    // coinciding edges:
     rotatePoints(
-      q.d.pos, he_face_q.from.d.pos, he_face_q.twin.prev.from.d.pos,
-      [...collectVertices(he_face_q.from, new Set([p, q]))].map(v => v.d),
+      q.d.pos,
+      // TODO Avoid adding q.d.pos, which is subtracted immediately inside rotatePoints(...)
+      XYZ.plus(q.d.pos, faceOrientation(he_face_q)),
+      XYZ.plus(q.d.pos, XYZ.negate(faceOrientation(he_face_q.twin.prev.twin))),
+      beyond_pq,
     );
 
     const [he_t1_t2, he_t2_t1] = this.splitLoop(he_face_q.twin, he_face_q.twin.prev.prev, {create: "left"});
     const he_q_t1 = he_t1_t2.prev;
     const he_t2_q = he_t1_t2.next;
+    delete verticesByName[t2.name];
     const t = this.contractEdge(he_t1_t2);
     t.name = `[${he_t1_t2.from.name}|${he_t1_t2.to.name}]`;
     this.dropEdge(he_q_t1);
+    assert(isBetweenCoplanarLoops(he_t2_q));
     this.dropEdge(he_t2_q);
   }
 }
+
+/**
+ * Return a vector
+ * - parallel to the plane of `he.loop` and
+ * - orthogonal to the direction of `he`.
+ * 
+ * (It does not matter if the result points from the half edge into the loop or
+ * in the opposite direction.  Consistent behavior suffices.)
+ */
+const faceOrientation = (he: HalfEdge) =>
+  XYZ.contractLeft(XYZ.minus(he.to.d.pos, he.from.d.pos), directedArea(he.loop));
+
+const directedArea = (loop: Loop) => XYZ.normalize(loop.halfEdges().reduce(
+  (acc, {from, to}) => XYZ.plus(acc, XYZ.wedgeProduct(from.d.pos, to.d.pos)),
+  XYZ.zero(),
+));
 
 function logEdge(name: string, he0: HalfEdge) {
   const he1 = he0.twin;
