@@ -30,6 +30,7 @@ type PhaseData = {
 export function App() {
   const polygonDefElem = useRef<HTMLTextAreaElement>();
   const actionsDefElem = useRef<HTMLTextAreaElement>();
+  const phaseSelectElem = useRef<HTMLSelectElement>();
 
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
@@ -125,6 +126,10 @@ export function App() {
 
   useEffect(run, []);
 
+  useEffect(() => {
+    phaseSelectElem.current?.focus();
+  }, [phases, phaseSelectElem.current]);
+
   return (
     <>
       <div style={{display: "flex"}}>
@@ -153,7 +158,10 @@ export function App() {
               <label>
                 Select step:
                 <br/>
-                <select onChange={e => setPhaseNo(e.target["value"])}>
+                <select
+                  ref={phaseSelectElem}
+                  onChange={e => setPhaseNo(e.target["value"])}
+                >
                   {phases.map((phaseData, i) => (
                     <option selected={phaseNo === i} value={i}>
                       {i+1}. {phaseData.logTitle}
