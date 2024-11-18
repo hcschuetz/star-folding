@@ -72,6 +72,10 @@ export function intersect3Spheres(
   return intersections;
 }
 
+/**
+ * Rotate `points` around `pivot` in the plane of `pivot`, `from`, and `to`
+ * by the angle (from, pivot, to).
+ */
 export function rotatePoints(
   pivot: MV,
   from: MV, to: MV,
