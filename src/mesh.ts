@@ -1,4 +1,4 @@
-abstract class WithId<V,L,E> {
+abstract class WithId {
   static count = 0;
   id: string;
   constructor() {
@@ -6,7 +6,7 @@ abstract class WithId<V,L,E> {
   }
 }
 
-abstract class Named<V,L,E> extends WithId <V,L,E>{
+abstract class Named<V,L,E> extends WithId {
   constructor(
     public mesh: MeshG<V,L,E>,
     public name: string,
@@ -16,7 +16,7 @@ abstract class Named<V,L,E> extends WithId <V,L,E>{
 // Added suffix "G" to exported generic classes so that application code can
 // use the plain names for the specific instances (without `import ... as`).
 
-export class HalfEdgeG<V,L,E> extends WithId<V,L,E> {
+export class HalfEdgeG<V,L,E> extends WithId {
   loop: LoopG<V,L,E>;
 
   prev: HalfEdgeG<V,L,E>;
