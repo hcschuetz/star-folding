@@ -14,7 +14,9 @@ export function log(...args: any[]) {
 export function fail(msg: string): never {
   // debugger;
   log(`FAILED: ${msg}`);
-  throw new Error(msg);
+  const error = new Error(msg);
+  log(error.stack);
+  throw error;
 };
 
 export function assert(test: boolean) {
