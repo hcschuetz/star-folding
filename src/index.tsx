@@ -51,7 +51,6 @@ export function App() {
     let error = null;
     const log = (...args: any[]) => { logText += args.join(" ") + "\n"; };
     setLogger(log);
-    const fail = (msg: string) => { throw new Error("FAILED: " + msg); };
     let mesh = new Mesh(log, fail);
 
     function emitPhase(logTitle: string) {
