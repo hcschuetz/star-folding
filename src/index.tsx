@@ -5,7 +5,7 @@ import { Vector3 as V3 } from '@babylonjs/core';
 import * as G from "@babylonjs/gui";
 
 import './style.css';
-import { assert, choose, count, fail, getLines, log, setLogger } from './utils';
+import { assert, choose, count, fail, findUnique, getLines, log, setLogger } from './utils';
 import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
 import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
 import { initialActionsDef, initialPolygonDef } from './init';
@@ -596,8 +596,8 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.checkWithData();
     const halfEdges = [...face.halfEdges()];
     const [he0, he1] = this.splitLoop(
-      halfEdges.find(he => he.to === p),
-      halfEdges.find(he => he.to === q),
+      findUnique(halfEdges, he => he.to === p),
+      findUnique(halfEdges, he => he.to === q),
       {create: "right"}
     )
     const newFace = he1.loop;
@@ -621,10 +621,10 @@ class Mesh extends MeshG<VData, LData, EData> {
     const face1 = findUniqueFace(p, q);
     const face2 = findUniqueFace(q, r);
 
-    const he_q_tip1 = [...q.halfEdgesOut()].find(he => !he.loop.d.isFace);
+    const he_q_tip1 = findUnique([...q.halfEdgesOut()], he => !he.loop.d.isFace);
     const he_tip1_q = he_q_tip1.twin;
     const tip1 = he_q_tip1.to;
-    const he_tip2_q = [...q.halfEdgesIn ()].find(he => !he.loop.d.isFace);
+    const he_tip2_q = findUnique([...q.halfEdgesIn ()], he => !he.loop.d.isFace);
     const he_q_tip2 = he_tip2_q.twin;
     const tip2 = he_tip2_q.from;
 
@@ -688,8 +688,8 @@ class Mesh extends MeshG<VData, LData, EData> {
     const q = verticesByName[qName] ?? fail(`no such vertex: ${qName}`);
     const face = findUniqueFace(p, q);
 
-    const he_face_p = [...p.halfEdgesIn()].find(he => he.loop === face);
-    const he_face_q = [...q.halfEdgesIn()].find(he => he.loop === face);
+    const he_face_p = findUnique([...p.halfEdgesIn()], he => he.loop === face);
+    const he_face_q = findUnique([...q.halfEdgesIn()], he => he.loop === face);
     const [he_pq, he_qp] = this.splitLoop(he_face_p, he_face_q, {create: "right"});
 
     const [he_qp1, he_pq1] = this.splitLoop(he_pq, he_face_p, {create: "left"});
