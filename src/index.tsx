@@ -505,11 +505,6 @@ class Mesh extends MeshG<VData, LData, EData> {
   checkWithData() {
     this.check();
 
-    function emitError(msg: string) {
-      log("ERROR: " + msg);
-      fail(msg);
-    }
-
     for (const loop of this.loops) {
       if (loop.d.isFace) {
         [...loop.vertices()].forEach((v, i, array) => {
@@ -533,10 +528,10 @@ class Mesh extends MeshG<VData, LData, EData> {
       let i = 0;
       for (const he of vertex.halfEdgesOut()) {
         if (i > 50) {
-          emitError(`neighborhood of vertex ${vertex} too long`)
+          fail(`neighborhood of vertex ${vertex} too long`)
         }
         if (he.from !== vertex) {
-          emitError(`${he}: he.from ${he.from} should be ${vertex} (he: ${he}, he.to: ${he.to})`);
+          fail(`${he}: he.from ${he.from} should be ${vertex} (he: ${he}, he.to: ${he.to})`);
         }
       }
     }
@@ -598,10 +593,7 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   splitFace(face: Loop, p: Vertex, q: Vertex) {
-    log("---------------------------------------------------------");
-    log(`splitting ${face} along ${p.name}-${q.name}`)
     this.checkWithData();
-
     const halfEdges = [...face.halfEdges()];
     const [he0, he1] = this.splitLoop(
       halfEdges.find(he => he.to === p),
@@ -609,13 +601,10 @@ class Mesh extends MeshG<VData, LData, EData> {
       {create: "right"}
     )
     const newFace = he1.loop;
-    log("new face temp name:", newFace.name);
     newFace.d = {isFace: true};
     newFace.name = `split(${p.name}-${q.name})`;
-    log("new face new name:", newFace.name);
     this.logMesh()
     this.checkWithData();
-    log("splitFace done")
   }
 
   bend2(args: string[]) {
@@ -630,9 +619,7 @@ class Mesh extends MeshG<VData, LData, EData> {
     );
     const [p, q, r] = argVertices;
     const face1 = findUniqueFace(p, q);
-    log(`bend ${face1} along new edges ${p} - ${q}`);
     const face2 = findUniqueFace(q, r);
-    log(`bend ${face2} along new edges ${q} - ${r}`);
 
     const he_q_tip1 = [...q.halfEdgesOut()].find(he => !he.loop.d.isFace);
     const he_tip1_q = he_q_tip1.twin;
@@ -641,31 +628,14 @@ class Mesh extends MeshG<VData, LData, EData> {
     const he_q_tip2 = he_tip2_q.twin;
     const tip2 = he_tip2_q.from;
 
-    log("points:", [p, tip1, q, tip2, r].map(point =>
-      `\n  ${point.name}: ${point.d.pos.toString()}`
-    ).join(""));
-
     this.splitFace(face1, p, q);
     this.splitFace(face2, q, r);
 
     const border = new Set([p, q, r]);
     const beyond_pq = collectVertices(tip1, border);
     const beyond_qr = collectVertices(tip2, border);
-    log("---------------------------------------------------------");
 
-    if ([...beyond_pq].some(vtx => beyond_qr.has(vtx))) fail(
-      `overlapping parts:\n  {${
-        [...beyond_pq].join(" ")}
-      }\n  {${
-        [...beyond_qr].join(" ")}
-      }`
-    );
-    log("radii:", [
-      distance(p.d.pos, tip1.d.pos),
-      distance(q.d.pos, tip1.d.pos),
-      distance(q.d.pos, tip2.d.pos),
-      distance(r.d.pos, tip2.d.pos),
-    ].map(d => "\n  " + d.toFixed(5)).join(""));
+    assert(![...beyond_pq].some(vtx => beyond_qr.has(vtx)));
     const [inters1 , inters2] = intersect3Spheres(
       p.d.pos, tip1.d.pos,
       q.d.pos, tip1 /* or tip2 */.d.pos,
@@ -673,27 +643,19 @@ class Mesh extends MeshG<VData, LData, EData> {
     );
     const inters = choice === "+" ? inters2 : inters1;
 
-    log(`rotation ${p}-${q} ${projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos)}[${tip1.d.pos} => ${inters}]:`, ...beyond_pq);
     rotatePoints(projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos), tip1.d.pos, inters, [...beyond_pq].map(v => v.d));
-    log(`rotation ${q}-${r} ${projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos)}[${tip2.d.pos} => ${inters}]:`, ...beyond_qr);
     rotatePoints(projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos), tip2.d.pos, inters, [...beyond_qr].map(v => v.d));
-    const dist = distance(tip1.d.pos, tip2.d.pos);
-    if (dist > 1e-8) fail(
-      `vertices ${tip1} ${tip2} to merge too far apart: ${dist}`
-    );
+    assert(distance(tip1.d.pos, tip2.d.pos) < 1e-8);
 
     this.mergeEdges(tip1, q, tip2);
     this.logMesh();
     this.checkWithData();
 
     const he_tip1_q_aux = findHE(tip1, q);
-    log("compare", he_tip1_q === he_tip1_q_aux, he_tip1_q, he_tip1_q_aux);
     if (isBetweenCoplanarLoops(he_tip1_q_aux)) {
       // TODO create a test case for this situation
-      log(`merging coplanar faces ${he_q_tip2.loop} and ${he_tip1_q_aux.loop}`);
       this.logMesh(); this.checkWithData();
       this.dropEdge(he_tip1_q_aux); // or he_q_tip2?
-      log(`merged faces ${he_q_tip2.loop} into ${he_tip1_q_aux.loop}`);
     }
   }
 
@@ -704,7 +666,6 @@ class Mesh extends MeshG<VData, LData, EData> {
   mergeEdges(tip1: Vertex, q: Vertex, tip2: Vertex) {
     const he_tip1_q = findHE(tip1, q), he_q_tip1 = he_tip1_q.twin;
     const he_q_tip2 = findHE(q, tip2), he_tip2_q = he_q_tip2.twin;
-    log(`Half edges ${he_tip2_q} and ${he_q_tip1} should become unreachable`);
 
     // TODO Let MeshG provide a method combining splitLoop and contractEdge?
     // This would avoid creating a temporary edge and a temporary loop.
@@ -723,12 +684,9 @@ class Mesh extends MeshG<VData, LData, EData> {
 
     if (args.length !== 2) fail(`reattachL expects 2 args`);
     const [pName, qName] = args;
-    log("vertex names:", Object.keys(verticesByName));
-    log("vertices:", this.vertices.values().map(v => v.name).toArray().join(", "));
     const p = verticesByName[pName] ?? fail(`no such vertex: ${pName}`);
     const q = verticesByName[qName] ?? fail(`no such vertex: ${qName}`);
     const face = findUniqueFace(p, q);
-    log(`cut ${face} along new edge ${p} - ${q} and re-attach it`);
 
     const he_face_p = [...p.halfEdgesIn()].find(he => he.loop === face);
     const he_face_q = [...q.halfEdgesIn()].find(he => he.loop === face);
@@ -745,20 +703,18 @@ class Mesh extends MeshG<VData, LData, EData> {
     const t1 = he_face_q.from;
     const t2 = he_face_q.twin.prev.from;
 
-    const beyond_pq =
-      [...collectVertices(t1, new Set([p, q]))].map(v => v.d);
+    const beyond_pq = [...collectVertices(t1, new Set([p, q]))];
 
-      assert(beyond_pq.includes(pNew.d));
-      assert(beyond_pq.includes(t1.d));
-      // TODO Should this hold?:
-      // assert(!beyond_pq.includes(t2.d));
+    assert(beyond_pq.includes(pNew));
+    assert(beyond_pq.includes(t1));
+    assert(!beyond_pq.includes(t2));
 
     // q is not moved by reattachment.  So it is already in the right place.
     // pNew has already got its new position.
     // The following rotation of the snippet vertices ensures
     // - that edges q-t1 and q-t2 coincide and
     // - that the snippet fits with q and pNew (instead of p):
-    rotatePoints(q.d.pos, t1.d.pos, t2.d.pos, beyond_pq);
+    rotatePoints(q.d.pos, t1.d.pos, t2.d.pos, beyond_pq.map(v => v.d));
     // But still the two faces behind q-t1 and q-t2 might not be in a plane.
     // So we perform another rotation of the snippet around the newly
     // coinciding edges:
@@ -767,7 +723,7 @@ class Mesh extends MeshG<VData, LData, EData> {
       // TODO Avoid adding q.d.pos, which is subtracted immediately inside rotatePoints(...)
       XYZ.plus(q.d.pos, faceOrientation(he_face_q)),
       XYZ.plus(q.d.pos, XYZ.negate(faceOrientation(he_face_q.twin.prev.twin))),
-      beyond_pq,
+      beyond_pq.map(v => v.d),
     );
 
     const [he_t1_t2, he_t2_t1] = this.splitLoop(he_face_q.twin, he_face_q.twin.prev.prev, {create: "left"});
@@ -816,8 +772,6 @@ function findUniqueFace(p: Vertex, q: Vertex) {
       matchedFaces.length}: {${matchedFaces.join(", ")}}`,
   );
   const [face] = matchedFaces
-  log(`Found unique face ${face} adjacent to ${p} and ${q}`);
-  // TODO Warn if there is already an edge from p to q?
   return face;
 }
 
