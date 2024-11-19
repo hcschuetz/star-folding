@@ -285,13 +285,13 @@ function renderToCanvas(
       const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
       ball.position = pos;
       ball.parent = root;
-      ball.material = vertexNames[i].length > 2 ? tipMaterial : innerMaterial;
+      ball.material = vertexNames[i].includes("^") ? tipMaterial : innerMaterial;
     });
   }
   if (showVertexNames) {
     vertices.forEach((pos, i) => {
       const labelText = vertexNames[i];
-      if (labelText.length > 2) return;
+      if (labelText.includes("^")) return;
       const labelPos = new B.TransformNode("labelPos" + i, scene);
       labelPos.parent = root;
       labelPos.position = v3(0, .2, 0).addInPlace(pos);
