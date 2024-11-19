@@ -749,20 +749,12 @@ function logEdge(name: string, he0: HalfEdge) {
 }
 
 /**
- * Find the face adjacent to all the given vertices.
- * Fail if there is no unique such face.
+ * Find the (unique) face adjacent to all the given vertices.
  */
-function findUniqueFace(p: Vertex, q: Vertex) {
-  const matchedFaces = [...p.loops()].filter(loop =>
+const findUniqueFace = (p: Vertex, q: Vertex) =>
+  findUnique(p.loops().toArray(), loop =>
     loop.d.isFace && [...loop.vertices()].includes(q)
   );
-  if (matchedFaces.length !== 1) fail(
-    `Expected 1 matching face adjacent to ${p} and ${q} but found ${
-      matchedFaces.length}: {${matchedFaces.join(", ")}}`,
-  );
-  const [face] = matchedFaces
-  return face;
-}
 
 /**
  * Return the vertices reachable from start without crossing the border.
