@@ -444,8 +444,6 @@ function isBetweenCoplanarLoops(he: HalfEdge): boolean {
 }
 
 class Mesh extends MeshG<VData, LData, EData> {
-  verticesByName: Record<string, Vertex> = {};
-
   constructor(
     log: (...args: any[]) => unknown,
     fail: (msg: string) => never,
@@ -454,8 +452,6 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   setup(def: string) {
-    const {verticesByName} = this;
-
     const [innerHE, outerHE] = this.addCore();
     Object.assign(innerHE.loop, {name: "star"      , d: {isFace: true }});
     Object.assign(outerHE.loop, {name: "outerspace", d: {isFace: false}});
@@ -478,13 +474,11 @@ class Mesh extends MeshG<VData, LData, EData> {
       const tip = innerHE0.from;
       tip.d = {pos: fromPos};
       tips.push(tip);
-      verticesByName[tip.name] = tip;
 
       const [innerHE1, outerHE1] = this.splitEdgeAcross(outerHE);
       const inward = innerHE1.from;
       inward.name = name;
       inward.d = {pos: innerPos};
-      verticesByName[inward.name] = inward;
     }
 
     if (XYZ.normSquared(currentPos) > 1e-12) fail(
@@ -492,7 +486,6 @@ class Mesh extends MeshG<VData, LData, EData> {
     );
 
     // remove dummy node
-    delete verticesByName[outerHE.from.name]
     this.contractEdge(outerHE);
 
     tips.forEach(tip => {
@@ -608,15 +601,14 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   bend2(args: string[]) {
+    const {vertices} = this;
+
     if (args.length !== 4) fail("bend2 expects 4 args");
-    const {verticesByName} = this;
     const choice = args.shift();
     if (!["+", "-"].includes(choice)) fail(
       "first arg of bend2 should be '+' or '-'."
     );
-    const argVertices = args.map(name =>
-      verticesByName[name] ?? fail(`no such vertex: ${name}`)
-    );
+    const argVertices = args.map(name => findUnique(vertices, v => v.name === name));
     const [p, q, r] = argVertices;
     const face1 = findUniqueFace(p, q);
     const face2 = findUniqueFace(q, r);
@@ -680,12 +672,12 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   reattachL(args: string[]) {
-    const {verticesByName} = this;
+    const {vertices} = this;
 
     if (args.length !== 2) fail(`reattachL expects 2 args`);
     const [pName, qName] = args;
-    const p = verticesByName[pName] ?? fail(`no such vertex: ${pName}`);
-    const q = verticesByName[qName] ?? fail(`no such vertex: ${qName}`);
+    const p = findUnique(vertices, v => v.name === pName);
+    const q = findUnique(vertices, v => v.name === qName);
     const face = findUniqueFace(p, q);
 
     const he_face_p = findUnique([...p.halfEdgesIn()], he => he.loop === face);
@@ -697,7 +689,6 @@ class Mesh extends MeshG<VData, LData, EData> {
     const pNew = he_p_pNew.to;
     pNew.name = p.name + "'";
     pNew.d = {pos: p.d.pos};
-    verticesByName[pNew.name] = pNew;
     this.dropEdge(he_p_pNew);
 
     const t1 = he_face_q.from;
@@ -729,7 +720,6 @@ class Mesh extends MeshG<VData, LData, EData> {
     const [he_t1_t2, he_t2_t1] = this.splitLoop(he_face_q.twin, he_face_q.twin.prev.prev, {create: "left"});
     const he_q_t1 = he_t1_t2.prev;
     const he_t2_q = he_t1_t2.next;
-    delete verticesByName[t2.name];
     const t = this.contractEdge(he_t1_t2);
     t.name = `[${he_t1_t2.from.name}|${he_t1_t2.to.name}]`;
     this.dropEdge(he_q_t1);
