@@ -346,8 +346,14 @@ export class MeshG<V,L,E> {
       );
     }
 
+    const seenVertexNames = new Set<string>();
+
     for (let v of vertices) {
       if (v.mesh !== this) fail(`foreign vertex: ${v}`);
+
+      if (seenVertexNames.has(v.name)) fail(`duplicate vertex name: ${v.name}`);
+      seenVertexNames.add(v.name);
+
       for (const he of v.halfEdgesOut()) {
         if (he.from !== v) fail(
           `inconsistent vertex: ${v} has outgoing ${he} starting from ${he.from}`
@@ -356,8 +362,14 @@ export class MeshG<V,L,E> {
       }
     }
 
+    const seenLoopNames = new Set<string>();
+
     for (let l of loops) {
       if (l.mesh !== this) fail(`foreign loop: ${l}`);
+
+      if (seenLoopNames.has(l.name)) fail(`duplicate loop name: ${l.name}`);
+      seenLoopNames.add(l.name);
+
       for (const he of l.halfEdges()) {
         if (he.loop !== l) fail(
           `inconsistent loop: ${l} has ${he} referencing ${he.loop}`
