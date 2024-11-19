@@ -357,8 +357,7 @@ export class MeshG<V,L,E> {
     }
 
     for (let l of loops) {
-      if (l.mesh !== this) fail(`f
-        oreign loop: ${l}`);
+      if (l.mesh !== this) fail(`foreign loop: ${l}`);
       for (const he of l.halfEdges()) {
         if (he.loop !== l) fail(
           `inconsistent loop: ${l} has ${he} referencing ${he.loop}`
