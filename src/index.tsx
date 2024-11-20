@@ -569,20 +569,6 @@ class Mesh extends MeshG<VData, LData, EData> {
     log(edgeMessages.sort().join("\n"));
   }
 
-  splitFace(face: Loop, p: Vertex, q: Vertex) {
-    this.checkWithData();
-    const halfEdges = [...face.halfEdges()];
-    const [he0, he1] = this.splitLoop(
-      findUnique(halfEdges, he => he.to === p),
-      findUnique(halfEdges, he => he.to === q),
-      {create: "right"}
-    )
-    const newFace = he1.loop;
-    newFace.name = `split(${p.name}-${q.name})`;
-    this.logMesh()
-    this.checkWithData();
-  }
-
   bend2(args: string[]) {
     const {vertices} = this;
 
@@ -603,59 +589,67 @@ class Mesh extends MeshG<VData, LData, EData> {
       return v;
     });
 
-    const face1 = this.findUniqueFace(p, q);
-    const face2 = this.findUniqueFace(q, r);
+    const he_q_boundary =
+      findUnique(q.halfEdgesOut(), he => he.loop === this.boundary);
+    const he_boundary_q = he_q_boundary.prev;
 
-    const he_q_tip1 = findUnique([...q.halfEdgesOut()], he => he.loop === this.boundary);
-    const tip1 = he_q_tip1.to;
-    const he_tip2_q = he_q_tip1.prev;
-    const tip2 = he_tip2_q.from;
+    const t1 = he_q_boundary.to;
+    const t2 = he_boundary_q.from;
 
-    this.splitFace(face1, p, q);
-    this.splitFace(face2, q, r);
+    // Use new names {s1, s2} for {p, r} in such a way that walking on the
+    // boundary counterclockwise (and thus against the half-edge directions)
+    // will reach the vertices in the order s1->q->s2->s1.
+    let s1: Vertex, s2: Vertex;
+    for (let count = 0, he = he_q_boundary; ; count++, he = he.next) {
+      if (count > 50) fail("runaway search loop");
+      if (he.to === p) { s1 = p; s2 = r; break; }
+      if (he.to === r) { s1 = r; s2 = p; break; }
+    }
 
-    const border = new Set([p, q, r]);
-    const beyond_pq = collectVertices(tip1, border);
-    const beyond_qr = collectVertices(tip2, border);
+    const face1 = this.findUniqueFace(s1, q);
+    const face2 = this.findUniqueFace(q, s1);
 
-    assert(![...beyond_pq].some(vtx => beyond_qr.has(vtx)));
+    const border = new Set([s1, q, s2]);
+    const beyond1 = collectVertices(t1, border);
+    const beyond2 = collectVertices(t2, border);
+    assert(beyond1.isDisjointFrom(beyond2));
+
+    this.splitLoop(
+      findUnique(face1.halfEdges(), he => he.to === q),
+      findUnique(face1.halfEdges(), he => he.to === s1),
+      {create: "left"}
+    )[0].loop.name = `split(${q.name}-${s1.name})`;
+
+    this.splitLoop(
+      findUnique(face2.halfEdges(), he => he.to === s2),
+      findUnique(face2.halfEdges(), he => he.to === q),
+      {create: "left"}
+    )[0].loop.name = `split(${q.name}-${s2.name})`;
+
     const [inters1 , inters2] = intersect3Spheres(
-      p.d.pos, tip1.d.pos,
-      q.d.pos, tip1 /* or tip2 */.d.pos,
-      r.d.pos, tip2.d.pos,
+      s1.d.pos, t1.d.pos,
+      q.d.pos, t1/* or t2 */.d.pos,
+      s2.d.pos, t2.d.pos,
     );
     const inters = choice === "+" ? inters2 : inters1;
 
-    rotatePoints(projectPointToLine(tip1.d.pos, p.d.pos, q.d.pos), tip1.d.pos, inters, [...beyond_pq].map(v => v.d));
-    rotatePoints(projectPointToLine(tip2.d.pos, q.d.pos, r.d.pos), tip2.d.pos, inters, [...beyond_qr].map(v => v.d));
-    assert(distance(tip1.d.pos, tip2.d.pos) < 1e-8);
-
-    this.mergeEdges(tip1, q, tip2);
-    this.logMesh();
-    this.checkWithData();
-
-    const he_tip1_q_aux = findHE(tip1, q);
-    if (isBetweenCoplanarLoops(he_tip1_q_aux)) {
-      // TODO create a test case for this situation
-      this.logMesh(); this.checkWithData();
-      this.dropEdge(he_tip1_q_aux); // or he_q_tip2?
-    }
-  }
-
-  /**
-   * Merge the two vertices tip1 and tip2 to tip := [tip1|tip2]
-   * and the two edges tip1-q and tip2-q to tip-q.
-  */
-  mergeEdges(tip1: Vertex, q: Vertex, tip2: Vertex) {
-    const he_tip1_q = findHE(tip1, q), he_q_tip1 = he_tip1_q.twin;
-    const he_q_tip2 = findHE(q, tip2), he_tip2_q = he_q_tip2.twin;
+    // TODO simplify geometry?
+    rotatePoints(projectPointToLine(t1.d.pos, s1.d.pos, q.d.pos), t1.d.pos, inters, beyond1.values().map(v => v.d));
+    rotatePoints(projectPointToLine(t2.d.pos, s2.d.pos, q.d.pos), t2.d.pos, inters, beyond2.values().map(v => v.d));
+    assert(distance(t1.d.pos, t2.d.pos) < 1e-8);
 
     // TODO Let MeshG provide a method combining splitLoop and contractEdge?
     // This would avoid creating a temporary edge and a temporary loop.
-    const tmpEdge = this.splitLoop(he_q_tip1, he_tip2_q.prev, {create: "left"});
+    const tmpEdge = this.splitLoop(he_q_boundary, he_boundary_q.prev, {create: "left"});
     this.contractEdge(tmpEdge[0]);
-    this.dropEdge(he_q_tip1);
-    tip1.name = mergeNames(tip2.name, tip1.name);
+    this.dropEdge(he_q_boundary);
+    t1.name = mergeNames(t2.name, t1.name);
+
+    const he_tip1_q_aux = findHE(t1, q);
+    if (isBetweenCoplanarLoops(he_tip1_q_aux)) {
+      // TODO create a test case for this situation
+      this.dropEdge(he_tip1_q_aux); 
+    }
   }
 
   reattach(args: string[]) {

@@ -65,9 +65,11 @@
 			<h3>bend2</h3>
 			<p>
 				One basic operation is to select 3 inner vertices P, Q, and R and
-				to bend the paper along the two line segments PQ and QR.
-				The bending angles are chosen automatically so that
+				to bend the paper around the two line segments PQ and QR.
+				The bending angles are computed automatically so that
 				the two neighbor vertices of Q will coincide.
+				(It is, however, not always possible to achieve this.
+				In this case the operation fails.)
 			</p>
 			<p>
 				In more detail: 
@@ -75,9 +77,6 @@
 			<ul>
 				<li>
 					P, Q, and R are expected to be on the boundary of our current manifold.
-					(Actually the code has been written with the assumption
-					that the boundary at Q is to the right of the chain P->Q->R.
-					If it is on the left, just exchange P and R.)
 					The line segments PQ and QR should be
 					proper diagonals of faces in our manifold.
 				</li>
