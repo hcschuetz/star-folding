@@ -97,7 +97,7 @@ export function App() {
           mesh.checkWithData();
         } catch (e) {
           error = e.toString();
-          log("CAUGHT EXCEPTION:", e);
+          log("CAUGHT EXCEPTION:", e, "\nstack:\n" + e.stack);
           break createPhases;
         } finally {
           emitPhase(line);

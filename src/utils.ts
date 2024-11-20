@@ -12,11 +12,7 @@ export function log(...args: any[]) {
 }
 
 export function fail(msg: string): never {
-  // debugger;
-  log(`FAILED: ${msg}`);
-  const error = new Error(msg);
-  log(error.stack);
-  throw error;
+  throw new Error(msg);
 };
 
 export function assert(test: boolean) {
