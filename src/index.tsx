@@ -759,11 +759,6 @@ const directedArea = (loop: Loop) => loop.halfEdges().reduce(
   XYZ.zero(),
 );
 
-function logEdge(name: string, he0: HalfEdge) {
-  const he1 = he0.twin;
-  log(`${name}: ${he0.prev}|${he1.next} ~ ${he1.to} ==[${he0}(${he0.loop}) | twin: ${he1}(${he1.loop})]==> ${he0.to} ~ ${he0.next}|${he1.prev}`);
-}
-
 /**
  * Return the vertices reachable from start without crossing the border.
  */
