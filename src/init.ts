@@ -13,13 +13,19 @@ k 1 12 12
 `;
 
 export const initialActionsDef = `
+reattach j i
+reattach i k
 reattach b c
 reattach e d
-bend2 + f g h
-bend2 + f h i
+reattach j.1 a
+bend2 + k a b.0
 bend2 + k c d
-reattach j i
-//reattach i k
-reattach f d
-// bend2 + k d e
+bend2 + e.0 b j.1
+bend2 + k d f
+// bend2 + j.1 k h
+bend2 + f g h
+bend2 + e f k
+// bend2 + i.0 h f
+reattach k h
+// bend2 + j.0 h i.0
 `;
