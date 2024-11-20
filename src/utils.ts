@@ -47,15 +47,13 @@ export const count = (iter: IteratorObject<any>): number =>
   iter.reduce(n => n+1, 0);
 
 export const findUnique = <T>(iter: Iterable<T>, pred: (t: T) => boolean): T => {
-  let found = false;
-  let value: T;
+  let found: T = undefined;
   for (let el of iter) {
     if (pred(el)) {
-      assert(!found);
-      found = true;
-      value = el;
+      assert(found === undefined);
+      found = el;
     }
   }
-  assert(found);
-  return value;
+  assert(found !== undefined);
+  return found;
 }
