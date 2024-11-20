@@ -595,8 +595,18 @@ class Mesh extends MeshG<VData, LData, EData> {
     if (!["+", "-"].includes(choice)) fail(
       "first arg of bend2 should be '+' or '-'."
     );
-    const argVertices = args.map(name => findUnique(vertices, v => v.name === name));
-    const [p, q, r] = argVertices;
+    const [p, q, r] = args.map(name => {
+      const found = vertices.values().filter(v => v.name === name).toArray();
+      if (found.length !== 1) fail(
+        `found ${found.length} vertices with name "${name}".`
+      );
+      const v = found[0];
+      if (!v.loops().some(l => l === this.boundary)) fail(
+        `vertex ${v} is not adjacent to the boundary.`
+      );
+      return v;
+    });
+
     const face1 = this.findUniqueFace(p, q);
     const face2 = this.findUniqueFace(q, r);
 
@@ -738,7 +748,13 @@ class Mesh extends MeshG<VData, LData, EData> {
    * Find the (unique) face adjacent to all the given vertices.
    */
   findUniqueFace(p: Vertex, q: Vertex) {
-    return findUnique(p.loops(), l => l !== this.boundary && [...l.vertices()].includes(q));
+    const found = p.loops().filter(l =>
+      l !== this.boundary && l.vertices().some(v => v === q)
+    ).toArray();
+    if (found.length !== 1) fail(
+      `found ${found.length} faces with vertices ${p} and ${q}: {${found.join(" ")}}.`
+    );
+    return found[0];
   }
 }
 
