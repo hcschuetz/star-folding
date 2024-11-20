@@ -650,9 +650,6 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.contractEdge(tmpEdge[0]);
     this.dropEdge(he_q_tip1);
     tip1.name = mergeNames(tip2.name, tip1.name);
-
-    this.logMesh();
-    this.checkWithData();
   }
 
   reattach(args: string[]) {
