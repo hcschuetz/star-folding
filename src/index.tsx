@@ -607,24 +607,23 @@ class Mesh extends MeshG<VData, LData, EData> {
     }
 
     const face1 = this.findUniqueFace(s1, q);
-    const face2 = this.findUniqueFace(q, s1);
-
-    const border = new Set([s1, q, s2]);
-    const beyond1 = collectVertices(t1, border);
-    const beyond2 = collectVertices(t2, border);
-    assert(beyond1.isDisjointFrom(beyond2));
-
     this.splitLoop(
       findUnique(face1.halfEdges(), he => he.to === q),
       findUnique(face1.halfEdges(), he => he.to === s1),
       {create: "left"}
     )[0].loop.name = `split(${q.name}-${s1.name})`;
 
+    const face2 = this.findUniqueFace(q, s2);;
     this.splitLoop(
       findUnique(face2.halfEdges(), he => he.to === s2),
       findUnique(face2.halfEdges(), he => he.to === q),
       {create: "left"}
     )[0].loop.name = `split(${q.name}-${s2.name})`;
+
+    const border = new Set([s1, q, s2]);
+    const beyond1 = collectVertices(t1, border);
+    const beyond2 = collectVertices(t2, border);
+    assert(beyond1.isDisjointFrom(beyond2));
 
     const [inters1 , inters2] = intersect3Spheres(
       s1.d.pos, t1.d.pos,
