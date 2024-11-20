@@ -720,7 +720,7 @@ class Mesh extends MeshG<VData, LData, EData> {
       // TODO Avoid adding q.d.pos, which is subtracted immediately inside rotatePoints(...)
       XYZ.plus(q.d.pos, faceOrientation(fromHE.twin)),
       XYZ.plus(q.d.pos, XYZ.negate(faceOrientation(toHE.twin))),
-      part1.values().map(v => v.d),
+      toRotateVs.values().map(v => v.d),
     );
     log("after rot2", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
       `{${toRotateVs.values().map(v => v.d.pos).toArray().join(" ")}}`);
