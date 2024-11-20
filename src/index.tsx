@@ -404,40 +404,22 @@ type Loop = LoopG<VData, LData, EData>;
 type Vertex = VertexG<VData, LData, EData>;
 type HalfEdge = HalfEdgeG<VData, LData, EData>;
 
+/**
+ * Would merging the two loops adjacent to `he` and its twin result
+ * in a flat loop?
+ */
 function isBetweenCoplanarLoops(he: HalfEdge): boolean {
-  // Search for parallelepipeds with non-zero volume spanned by 4 vertices
-  // from `he`'s adjacent loop and `he.twin`'s adjacent loop.
-  // The two loops are coplanar iff no such parallelepiped exists.
-
-  const vertices =
-    [...new Set<Vertex>([...he.loop.vertices(), ...he.twin.loop.vertices()])];
-  const nVertices = vertices.length;
-
-  // A shorter version using choose:
-  // for (const [p,q,r,s] of choose(vertices.map(v => v.d.pos), 4)) {
-  //   if (!closeTo0(XYZ.wedgeProduct(XYZ.minus(q, p), XYZ.minus(r, p), XYZ.minus(s, p)))) {
-  //     return false;
-  //   }
-  // }
-
-  for (let i = 0; i < nVertices - 3; i++) {
-    const base = vertices[i].d.pos;
-    for (let j = i + 1; j < nVertices - 2; j++) {
-      const len_ij = XYZ.minus(vertices[j].d.pos, base);
-      if (closeTo0(len_ij)) break; // (*)
-      for (let k = j + 1; k < nVertices - 1; k++) {
-        const area_ijk = XYZ.wedgeProduct(len_ij, XYZ.minus(vertices[k].d.pos, base));
-        if (closeTo0(area_ijk)) break; // (*)
-        for (let l = k + 1; l < nVertices; l++) {
-          const vol_ijkl = XYZ.wedgeProduct(area_ijk, XYZ.minus(vertices[l].d.pos, base));
-          if (closeTo0(vol_ijkl)) break;
-          return false;
-        }
-      }
-    }
-  }
-  // (*) Are these checks worthwhile?  They are not needed for correctness.
-  return true;
+  assert(isLoopFlat(he.loop));
+  assert(isLoopFlat(he.twin.loop));
+  // Assuming that each of the two loops is already flat, we only need to
+  // check if they have the same normalized directed areas.
+  // If one of the loops is degenerated, the union is flat as well.
+  const a1 = directedArea(he.loop), a2 = directedArea(he.twin.loop);
+  const a1n = XYZ.norm(a1), a2n = XYZ.norm(a2);
+  return (
+    a1n < 1e-8 || a2n < 1e-8 ||
+    closeTo0(XYZ.minus(XYZ.scale(1/a1n, a1), XYZ.scale(1/a2n, a2)))
+  );
 }
 
 class Mesh extends MeshG<VData, LData, EData> {
@@ -499,22 +481,8 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.check();
 
     for (const loop of this.loops) {
-      if (loop !== this.boundary) {
-        [...loop.vertices()].forEach((v, i, array) => {
-          const v1 = array[(i + 1) % array.length];
-          const v2 = array[(i + 2) % array.length];
-          const v3 = array[(i + 3) % array.length];
-          const vol = XYZ.wedgeProduct(
-            XYZ.minus(v1.d.pos, v.d.pos),
-            XYZ.minus(v2.d.pos, v.d.pos),
-            XYZ.minus(v3.d.pos, v.d.pos),
-          );
-          if (!closeTo0(vol)) {
-            fail(`face ${loop} not flat (${vol}; ${vol.value("xyz")}): ${
-              [v, v1, v2, v3].flatMap(vtx => ["\n ", vtx, vtx.d.pos]).join(", ")
-            }`);
-          }
-        });
+      if (loop !== this.boundary && !isLoopFlat(loop)) {
+        fail(`face ${loop} not flat`);
       }
     }
     for (const vertex of this.vertices) {
@@ -759,7 +727,9 @@ class Mesh extends MeshG<VData, LData, EData> {
     const t = this.contractEdge(he_t1_t2);
     t.name = mergeNames(he_t1_t2.from.name, he_t1_t2.to.name);
     this.dropEdge(he_q_boundary);
-    assert(isBetweenCoplanarLoops(he_boundary_q));
+    if (!isBetweenCoplanarLoops(he_boundary_q)) fail(
+      `faces not coplanar: ${he_boundary_q.loop} and ${he_boundary_q.twin}`
+    );
     this.dropEdge(he_boundary_q);
     // TODO If more pairs of edges/vertices happen to align, merge them.
   }
@@ -773,6 +743,18 @@ class Mesh extends MeshG<VData, LData, EData> {
 }
 
 const heLength = (he: HalfEdge) => distance(he.from.d.pos, he.to.d.pos);
+
+function isLoopFlat(loop: Loop) {
+  // This is a bit too optimistic:  A non-flat loop with total area 0 will be
+  // reported as flat.
+  const a = directedArea(loop);
+  for (const {from, to} of loop.halfEdges()) {
+    if (!closeTo0(XYZ.wedgeProduct(a, XYZ.minus(to.d.pos, from.d.pos)))) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /**
  * Return a vector
