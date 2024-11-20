@@ -663,67 +663,96 @@ class Mesh extends MeshG<VData, LData, EData> {
     const tmpEdge = this.splitLoop(he_q_tip1, he_tip2_q.prev, {create: "left"});
     this.contractEdge(tmpEdge[0]);
     this.dropEdge(he_q_tip1);
-    tip1.name =
-      tip2.name === tip1.name + "'" ? tip1.name : `[${tip1.name}|${tip2.name}]`;
+    tip1.name = mergeNames(tip2.name, tip1.name);
 
     this.logMesh();
     this.checkWithData();
   }
 
-  reattachL(args: string[]) {
+  reattach(args: string[]) {
     const {vertices} = this;
 
-    if (args.length !== 2) fail(`reattachL expects 2 args`);
+    if (args.length !== 2) fail(`reattach expects 2 args`);
     const [pName, qName] = args;
     const p = findUnique(vertices, v => v.name === pName);
     const q = findUnique(vertices, v => v.name === qName);
     const face = findUniqueFace(p, q);
+    const he_face_p = findUnique(p.halfEdgesIn(), he => he.loop === face);
+    const he_face_q = findUnique(q.halfEdgesIn(), he => he.loop === face);
+    const he_boundary_p = findUnique([...p.halfEdgesIn()], he => !he.loop.d.isFace);
+    const he_boundary_q = findUnique([...q.halfEdgesIn()], he => !he.loop.d.isFace);
+    const he_q_boundary = he_boundary_q.next;
+    assert(!he_q_boundary.loop.d.isFace);
+    const t1 = he_boundary_q.from;
+    const t2 = he_q_boundary.to;
+    assert(Math.abs(distance(t1.d.pos, q.d.pos) - distance(t2.d.pos, q.d.pos)) < 1e-8);
 
-    const he_face_p = findUnique([...p.halfEdgesIn()], he => he.loop === face);
-    const he_face_q = findUnique([...q.halfEdgesIn()], he => he.loop === face);
-    const [he_pq, he_qp] = this.splitLoop(he_face_p, he_face_q, {create: "right"});
+    const [he_pq_A, he_qp_A] = this.splitLoop(he_face_p, he_face_q, {create: "right"});
+    const [he_qp_B, he_pq_B] = this.splitLoop(he_pq_A, he_face_p, {create: "left"});
+    // One of these will actually be merged with outerspace and thus is a boundary.
+    // The But it does not matter since it's a temporary loop anyway.
+    // (But we add some data so that logging/checking will not fail.)
+    log("AB", he_qp_A.loop.name, he_qp_A.loop.d, he_qp_B.loop.name, he_qp_B.loop.d);
+    he_qp_A.loop.d = {isFace: true};
+    he_qp_B.loop.d = {isFace: false};
+    const [he_p0_p1, he_p1_p0] = this.splitVertex(he_boundary_p, he_qp_B, {create: "both"});
+    he_p0_p1.from.d = {pos: p.d.pos};
+    he_p0_p1.to.d = {pos: p.d.pos};
+    vertices.delete(p);
+    this.dropEdge(he_p0_p1);
 
-    const [he_qp1, he_pq1] = this.splitLoop(he_pq, he_face_p, {create: "left"});
-    const [he_pNew_p, he_p_pNew] = this.splitVertex(he_face_p.twin.prev, he_qp1, {create: "left"});
-    const pNew = he_p_pNew.to;
-    pNew.name = p.name + "'";
-    pNew.d = {pos: p.d.pos};
-    this.dropEdge(he_p_pNew);
+    // Now we have cut through p and face.  The two pieces should be connected
+    // only at q.
 
-    const t1 = he_face_q.from;
-    const t2 = he_face_q.twin.prev.from;
+    log("reattach info:",
+      Object.entries({p, q, t1, t2, he_p0_p1}).map(([k, v]) => `${k} = ${v}`).join("; "),
+      face, `{${face.vertices().toArray().join(" ")}}`,
+    );
 
-    const beyond_pq = [...collectVertices(t1, new Set([p, q]))];
+    const separator = new Set([q]);
+    const part1 = collectVertices(t1, separator);
+    const part2 = collectVertices(t2, separator);
+    assert(part1.isDisjointFrom(part2));
+    assert(part1.has(t1));
+    assert(part2.has(t2));
 
-    assert(beyond_pq.includes(pNew));
-    assert(beyond_pq.includes(t1));
-    assert(!beyond_pq.includes(t2));
+    const [fromV, toV, fromHE, toHE, toRotateVs] =
+      part1.size <= part2.size
+      ? [t1, t2, he_boundary_q, he_q_boundary, part1]
+      : [t2, t1, he_q_boundary, he_boundary_q, part2];
 
     // q is not moved by reattachment.  So it is already in the right place.
-    // pNew has already got its new position.
     // The following rotation of the snippet vertices ensures
     // - that edges q-t1 and q-t2 coincide and
     // - that the snippet fits with q and pNew (instead of p):
-    rotatePoints(q.d.pos, t1.d.pos, t2.d.pos, beyond_pq.map(v => v.d));
+    log("before rot1", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
+      "dist:", distance(fromV.d.pos, toV.d.pos),
+      `{${toRotateVs.values().map(v => v.d.pos).toArray().join(" ")}}`);
+    rotatePoints(q.d.pos, fromV.d.pos, toV.d.pos, toRotateVs.values().map(v => v.d));
+    log("after rot1", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
+      `{${toRotateVs.values().map(v => v.d.pos).toArray().join(" ")}}`);
+    assert(closeTo0(XYZ.minus(fromV.d.pos, toV.d.pos)));
     // But still the two faces behind q-t1 and q-t2 might not be in a plane.
     // So we perform another rotation of the snippet around the newly
     // coinciding edges:
     rotatePoints(
       q.d.pos,
       // TODO Avoid adding q.d.pos, which is subtracted immediately inside rotatePoints(...)
-      XYZ.plus(q.d.pos, faceOrientation(he_face_q)),
-      XYZ.plus(q.d.pos, XYZ.negate(faceOrientation(he_face_q.twin.prev.twin))),
-      beyond_pq.map(v => v.d),
+      XYZ.plus(q.d.pos, faceOrientation(fromHE.twin)),
+      XYZ.plus(q.d.pos, XYZ.negate(faceOrientation(toHE.twin))),
+      part1.values().map(v => v.d),
     );
+    log("after rot2", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
+      `{${toRotateVs.values().map(v => v.d.pos).toArray().join(" ")}}`);
 
-    const [he_t1_t2, he_t2_t1] = this.splitLoop(he_face_q.twin, he_face_q.twin.prev.prev, {create: "left"});
-    const he_q_t1 = he_t1_t2.prev;
-    const he_t2_q = he_t1_t2.next;
+    const [he_t1_t2, he_t2_t1] =
+      this.splitLoop(he_q_boundary, he_q_boundary.prev.prev, {create: "left"});
     const t = this.contractEdge(he_t1_t2);
-    t.name = `[${he_t1_t2.from.name}|${he_t1_t2.to.name}]`;
-    this.dropEdge(he_q_t1);
-    assert(isBetweenCoplanarLoops(he_t2_q));
-    this.dropEdge(he_t2_q);
+    t.name = mergeNames(he_t1_t2.from.name, he_t1_t2.to.name);
+    this.dropEdge(he_q_boundary);
+    assert(isBetweenCoplanarLoops(he_boundary_q));
+    this.dropEdge(he_boundary_q);
+    // TODO If more pairs of edges/vertices happen to align, merge them.
   }
 }
 
@@ -752,9 +781,7 @@ function logEdge(name: string, he0: HalfEdge) {
  * Find the (unique) face adjacent to all the given vertices.
  */
 const findUniqueFace = (p: Vertex, q: Vertex) =>
-  findUnique(p.loops().toArray(), loop =>
-    loop.d.isFace && [...loop.vertices()].includes(q)
-  );
+  findUnique(p.loops(), l => l.d.isFace && [...l.vertices()].includes(q));
 
 /**
  * Return the vertices reachable from start without crossing the border.
@@ -772,4 +799,12 @@ function collectVertices(start: Vertex, border: Set<Vertex>): Set<Vertex> {
   return collected;
 }
 
-const cmdNames = ["bend2", "reattachL", "reattachR"];
+const cmdNames = ["bend2", "reattach"];
+
+const mergeNames = (a: string, b: string) =>
+  (a.endsWith(".0") || a.endsWith(".1")) &&
+  (b.endsWith(".0") || b.endsWith(".1")) &&
+  a.slice(0, -2) === b.slice(0, -2) &&
+  a !== b
+  ? a.slice(0, -2)
+  : `[${a}|${b}]`

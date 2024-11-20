@@ -126,36 +126,63 @@
 				and then 3 names of inner star vertices
 				as the vertices P, Q, and R above.
 			</p>
-			<h3>reattachL</h3>
+			<h3>reattach</h3>
 			<p>
-				Unfortunately it turned out that after a few "bend2" operations we
+				Unfortunately it turns out that after a few "bend2" operations we
 				get stuck without having reached a polyhedron.
 				We can advance a bit more if we re-arrange pieces of the star.
-				For example we can cut the star at edge bc and then paste the snippet
+				For example we can cut the star at edge b-c and then paste the snippet
 				to the rest of the star again in such a way that the two boundary
 				edges adjacent to c will coincide.
 				The snippet is essentially rotated around c as far as needed so that
 				the two neighbors of c along the boundary will coincide.
-				This operation is written as "reattachL b c".
+				This operation is written as "reattach b c".
 			</p>
 			<p>
 				After a reattach operation there are new diagonals,
 				which can be used in subsequent bending operations.
 			</p>
-			<h3>reattachR</h3>
 			<p>
-				"reattachL b c" rotates a small triangle a bit to the left.
-				We would similarly like to have an operation "reattachR d e"
-				rotating a small triangle a bit to the right.
-				I did not yet get around to implement this.
-				And it is actually not needed urgently.
-				We can simply use "reattach e d", which rotates the bulk of the
-				star a bit to the left around "d" and leaves the small snippet in place.
+				In more detail:
 			</p>
+			<ul>
+				<li>
+					"reattach P Q" expects vertices P and Q
+					<ul>
+						<li>to be on the manifold boundary and</li>
+						<li>to be adjacent to a common face.</li>
+					</ul>	
+				</li>
+				<li>
+					It cuts P and the face along the line segment P-Q.
+					This cuts the manifold into two pieces that are only connected at Q.
+					Two new boundary edges are introduced.
+					Now glue the two pieces together at the two "old" boundary edges
+					adjacent to Q.
+				</li>
+				<li>
+					To get the geometry right again, one of the pieces needs to be rotated
+					around Q.
+					The implementation moves the smaller piece, which makes the operation
+					easier to follow in the display.
+				</li>
+				<li>
+					The rotation is done in such a way that
+					<ul>
+						<li>the glued edges align and</li>
+						<li>the two faces adjacent to the glued edges
+							(which may or may not be the fragments of the initial face)
+							are in a common plane.</li>
+					</ul>
+				</li>
+				<li>
+					The two faces are merged into a single one.
+				</li>
+			</ul>
 			<h3>More Operations</h3>
 			<p>
 				(Read this section after some experimentation with
-				"reattachL" and "bend2".)
+				"reattach" and "bend2".)
 			</p>
 			<p>
 				I have not yet managed to find a "complete" folding reaching a
@@ -193,6 +220,14 @@
 				For example an exception mentioning a "negative discriminant"
 				indicates that a quadradic equation could not be solved.
 				This means that some spheres or circles do not intersect as expected.
+			</p>
+			<p>
+				Operations may fail due to unmet preconditions
+				(or due to implementation bugs).
+				Unfortunately most error messages are not yet very helpful.
+				(Better error reporting should be implemented.)
+				But at least it is clarified which step was the first one
+				to have a problem.
 			</p>
 		</details>
 		<div id="app"></div>

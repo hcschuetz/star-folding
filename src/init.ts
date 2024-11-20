@@ -13,17 +13,13 @@ k 1 12 12
 `;
 
 export const initialActionsDef = `
-reattachL b c
-reattachL e d
-// reattachL e f
-reattachL j i
-reattachL i k
-bend2 + k c d
-bend2 + k d f
+reattach b c
+reattach e d
 bend2 + f g h
 bend2 + f h i
-bend2 + f k a
-bend2 + e f i
-bend2 + a b e
-reattachL j' a
+bend2 + k c d
+reattach j i
+//reattach i k
+reattach f d
+// bend2 + k d e
 `;
