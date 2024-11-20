@@ -144,11 +144,7 @@ export function App() {
             <div class="display-controls">
               {
                 phases.at(-1).error
-                ? (
-                  <details>
-                    <summary>Failure at step #{phases.length}</summary>
-                    {phases.at(-1).error}
-                  </details>)
+                ? <a href={`#phase-${phases.length}`}>Failure at step #{phases.length}</a>
                 : `${phases.length} step${phases.length === 1 ? "" : "s"} succeeded`
               }
               <br/>
@@ -216,7 +212,7 @@ export function App() {
       <div class="output" style={{width: "fit-content"}}>
         {phases.map(({error, logTitle, logText}, i) => (
           <div className="phase" style={`background: #${error ? "fee" : "efe"};`}>
-            <details open={Boolean(error)}>
+            <details open={Boolean(error)} id={`phase-${i+1}`}>
               <summary><code>{i+1}. {logTitle}</code></summary>
               <pre>{logText}</pre>
             </details>
