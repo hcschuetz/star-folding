@@ -64,9 +64,7 @@ export function App() {
           v.neighbors().filter(w => v.id <= w.id)
           .map(w => [vtxToV3(v), vtxToV3(w)] as [V3, V3])
         ).toArray(),
-        // There is a ? before .isFace to be a bit more resilient
-        // when invoked after an exception:
-        triangles: loops.values().filter(l => l.d?.isFace).flatMap(l =>
+        triangles: loops.values().filter(l => l !== mesh.outerspace).flatMap(l =>
           triangulate(l.vertices().map(v => v.d.pos).toArray())
           .map(triangle => triangle.map(mvToV3))
         ).toArray(),
@@ -400,7 +398,7 @@ const steps = {
 
 
 type VData = { pos: MV };
-type LData = { isFace: boolean };
+type LData = void;
 type EData = void;
 type Loop = LoopG<VData, LData, EData>;
 type Vertex = VertexG<VData, LData, EData>;
@@ -443,6 +441,8 @@ function isBetweenCoplanarLoops(he: HalfEdge): boolean {
 }
 
 class Mesh extends MeshG<VData, LData, EData> {
+  outerspace: Loop;
+
   constructor(
     log: (...args: any[]) => unknown,
     fail: (msg: string) => never,
@@ -452,8 +452,9 @@ class Mesh extends MeshG<VData, LData, EData> {
 
   setup(def: string) {
     const [innerHE, outerHE] = this.addCore();
-    Object.assign(innerHE.loop, {name: "star"      , d: {isFace: true }});
-    Object.assign(outerHE.loop, {name: "outerspace", d: {isFace: false}});
+    this.outerspace = outerHE.loop
+    Object.assign(innerHE.loop, {name: "star"      });
+    Object.assign(outerHE.loop, {name: "outerspace"});
     Object.assign(innerHE.to, {name: "dummy", d: {pos: XYZ.vec([0, 0, 0])}});
     this.logMesh();
     this.checkWithData();
@@ -498,7 +499,7 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.check();
 
     for (const loop of this.loops) {
-      if (loop.d.isFace) {
+      if (loop !== this.outerspace) {
         [...loop.vertices()].forEach((v, i, array) => {
           const v1 = array[(i + 1) % array.length];
           const v2 = array[(i + 2) % array.length];
@@ -532,12 +533,9 @@ class Mesh extends MeshG<VData, LData, EData> {
 
   logMesh() {
     const {vertices, loops} = this;
-    for (const loop of loops) {
-      log(loop, 
-        "=", ...[...loop.halfEdges()].flatMap(he => [he, he.to]));
-      log(`  ${!loop.d ? "???loop" : loop.d.isFace ? "face" : "boundary"}:`
-        , ...[...loop.halfEdges()].map(he => he.to.name)
-      );
+    for (const l of loops) {
+      log(l, "=", ...[...l.halfEdges()].flatMap(he => [he, he.to]));
+      log(`  = (${count(l.halfEdges())}):`, ...[...l.halfEdges()].map(he => he.to.name));
     }
     for (const v of vertices) {
       const neighbors = [...v.neighbors()];
@@ -556,25 +554,16 @@ class Mesh extends MeshG<VData, LData, EData> {
       vertices.size} vertices (${
       count(vertices.values().filter(v => v.name.includes("^")))} tips), ${
       loops.size} loops (${
-      [...loops].filter(l => l.d.isFace).length
+      [...loops].filter(l => l !== this.outerspace).length
     } faces)`);
     const edgeMessages: string[] = [];
     for (const l of loops) {
-      if (!l.d.isFace) continue;
+      if (l === this.outerspace) continue;
       for (const he of l.halfEdges()) {
-        if (!he.twin.loop.d.isFace) continue;
+        if (he.twin.loop === this.outerspace) continue;
         if (he.from.name > he.to.name) continue; // avoid duplicate output
         // TODO compute a directed angle (as seen when looking along the half-edge)?
-        const angle = XYZ.getAngle(
-          XYZ.normalize(XYZ.minus(
-            he.next.to.d.pos,
-            projectPointToLine(he.next.to.d.pos, he.from.d.pos, he.to.d.pos),
-          )),
-          XYZ.normalize(XYZ.minus(
-            he.twin.next.to.d.pos,
-            projectPointToLine(he.twin.next.to.d.pos, he.from.d.pos, he.to.d.pos),
-          )),
-        );
+        const angle = XYZ.getAngle(faceOrientation(he), faceOrientation(he.twin));
         edgeMessages.push(
           `${he.from.name}->${he.to.name}: ${(angle/TAU*360).toFixed(5)}° ${
             he.from} ==[${he}(${he.loop})|${he.twin}(${he.twin.loop})]==> ${he.to}`
@@ -593,7 +582,6 @@ class Mesh extends MeshG<VData, LData, EData> {
       {create: "right"}
     )
     const newFace = he1.loop;
-    newFace.d = {isFace: true};
     newFace.name = `split(${p.name}-${q.name})`;
     this.logMesh()
     this.checkWithData();
@@ -609,14 +597,12 @@ class Mesh extends MeshG<VData, LData, EData> {
     );
     const argVertices = args.map(name => findUnique(vertices, v => v.name === name));
     const [p, q, r] = argVertices;
-    const face1 = findUniqueFace(p, q);
-    const face2 = findUniqueFace(q, r);
+    const face1 = this.findUniqueFace(p, q);
+    const face2 = this.findUniqueFace(q, r);
 
-    const he_q_tip1 = findUnique([...q.halfEdgesOut()], he => !he.loop.d.isFace);
-    const he_tip1_q = he_q_tip1.twin;
+    const he_q_tip1 = findUnique([...q.halfEdgesOut()], he => he.loop === this.outerspace);
     const tip1 = he_q_tip1.to;
-    const he_tip2_q = findUnique([...q.halfEdgesIn ()], he => !he.loop.d.isFace);
-    const he_q_tip2 = he_tip2_q.twin;
+    const he_tip2_q = he_q_tip1.prev;
     const tip2 = he_tip2_q.from;
 
     this.splitFace(face1, p, q);
@@ -676,26 +662,20 @@ class Mesh extends MeshG<VData, LData, EData> {
     const [pName, qName] = args;
     const p = findUnique(vertices, v => v.name === pName);
     const q = findUnique(vertices, v => v.name === qName);
-    const face = findUniqueFace(p, q);
+    const face = this.findUniqueFace(p, q);
     const he_face_p = findUnique(p.halfEdgesIn(), he => he.loop === face);
     const he_face_q = findUnique(q.halfEdgesIn(), he => he.loop === face);
-    const he_boundary_p = findUnique([...p.halfEdgesIn()], he => !he.loop.d.isFace);
-    const he_boundary_q = findUnique([...q.halfEdgesIn()], he => !he.loop.d.isFace);
+    const he_boundary_p = findUnique([...p.halfEdgesIn()], he => he.loop === this.outerspace);
+    const he_boundary_q = findUnique([...q.halfEdgesIn()], he => he.loop === this.outerspace);
     const he_q_boundary = he_boundary_q.next;
-    assert(!he_q_boundary.loop.d.isFace);
     const t1 = he_boundary_q.from;
     const t2 = he_q_boundary.to;
     assert(Math.abs(distance(t1.d.pos, q.d.pos) - distance(t2.d.pos, q.d.pos)) < 1e-8);
 
     const [he_pq_A, he_qp_A] = this.splitLoop(he_face_p, he_face_q, {create: "right"});
     const [he_qp_B, he_pq_B] = this.splitLoop(he_pq_A, he_face_p, {create: "left"});
-    // One of these will actually be merged with outerspace and thus is a boundary.
-    // The But it does not matter since it's a temporary loop anyway.
-    // (But we add some data so that logging/checking will not fail.)
     log("AB", he_qp_A.loop.name, he_qp_A.loop.d, he_qp_B.loop.name, he_qp_B.loop.d);
-    he_qp_A.loop.d = {isFace: true};
-    he_qp_B.loop.d = {isFace: false};
-    const [he_p0_p1, he_p1_p0] = this.splitVertex(he_boundary_p, he_qp_B, {create: "both"});
+    const [he_p0_p1, he_p1_p0] = this.splitVertex(he_qp_B, he_boundary_p, {create: "both"});
     he_p0_p1.from.d = {pos: p.d.pos};
     he_p0_p1.to.d = {pos: p.d.pos};
     vertices.delete(p);
@@ -754,6 +734,13 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.dropEdge(he_boundary_q);
     // TODO If more pairs of edges/vertices happen to align, merge them.
   }
+
+  /**
+   * Find the (unique) face adjacent to all the given vertices.
+   */
+  findUniqueFace(p: Vertex, q: Vertex) {
+    return findUnique(p.loops(), l => l !== this.outerspace && [...l.vertices()].includes(q));
+  }
 }
 
 /**
@@ -767,21 +754,15 @@ class Mesh extends MeshG<VData, LData, EData> {
 const faceOrientation = (he: HalfEdge) =>
   XYZ.contractLeft(XYZ.minus(he.to.d.pos, he.from.d.pos), directedArea(he.loop));
 
-const directedArea = (loop: Loop) => XYZ.normalize(loop.halfEdges().reduce(
+const directedArea = (loop: Loop) => loop.halfEdges().reduce(
   (acc, {from, to}) => XYZ.plus(acc, XYZ.wedgeProduct(from.d.pos, to.d.pos)),
   XYZ.zero(),
-));
+);
 
 function logEdge(name: string, he0: HalfEdge) {
   const he1 = he0.twin;
   log(`${name}: ${he0.prev}|${he1.next} ~ ${he1.to} ==[${he0}(${he0.loop}) | twin: ${he1}(${he1.loop})]==> ${he0.to} ~ ${he0.next}|${he1.prev}`);
 }
-
-/**
- * Find the (unique) face adjacent to all the given vertices.
- */
-const findUniqueFace = (p: Vertex, q: Vertex) =>
-  findUnique(p.loops(), l => l.d.isFace && [...l.vertices()].includes(q));
 
 /**
  * Return the vertices reachable from start without crossing the border.
