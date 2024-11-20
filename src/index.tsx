@@ -693,7 +693,7 @@ class Mesh extends MeshG<VData, LData, EData> {
     assert(part1.has(t1));
     assert(part2.has(t2));
 
-    const [fromV, toV, fromHE, toHE, toRotateVs] =
+    const [fromV, toV, fromHE, toHE, part] =
       part1.size <= part2.size
       ? [t1, t2, he_boundary_q, he_q_boundary, part1]
       : [t2, t1, he_q_boundary, he_boundary_q, part2];
@@ -704,10 +704,10 @@ class Mesh extends MeshG<VData, LData, EData> {
     // - that the snippet fits with q and pNew (instead of p):
     log("before rot1", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
       "dist:", distance(fromV.d.pos, toV.d.pos),
-      `{${toRotateVs.values().map(v => v.d.pos).toArray().join(" ")}}`);
-    rotatePoints(q.d.pos, fromV.d.pos, toV.d.pos, toRotateVs.values().map(v => v.d));
+      `{${part.values().map(v => v.d.pos).toArray().join(" ")}}`);
+    rotatePoints(q.d.pos, fromV.d.pos, toV.d.pos, part.values().map(v => v.d));
     log("after rot1", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
-      `{${toRotateVs.values().map(v => v.d.pos).toArray().join(" ")}}`);
+      `{${part.values().map(v => v.d.pos).toArray().join(" ")}}`);
     assert(closeTo0(XYZ.minus(fromV.d.pos, toV.d.pos)));
     // But still the two faces behind q-t1 and q-t2 might not be in a plane.
     // So we perform another rotation of the snippet around the newly
@@ -717,10 +717,10 @@ class Mesh extends MeshG<VData, LData, EData> {
       // TODO Avoid adding q.d.pos, which is subtracted immediately inside rotatePoints(...)
       XYZ.plus(q.d.pos, faceOrientation(fromHE.twin)),
       XYZ.plus(q.d.pos, XYZ.negate(faceOrientation(toHE.twin))),
-      toRotateVs.values().map(v => v.d),
+      part.values().map(v => v.d),
     );
     log("after rot2", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
-      `{${toRotateVs.values().map(v => v.d.pos).toArray().join(" ")}}`);
+      `{${part.values().map(v => v.d.pos).toArray().join(" ")}}`);
 
     const [he_t1_t2, he_t2_t1] =
       this.splitLoop(he_q_boundary, he_q_boundary.prev.prev, {create: "left"});
