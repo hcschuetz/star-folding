@@ -528,7 +528,39 @@ class Mesh extends MeshG<VData, LData, EData> {
         }
       }
     }
+    this.checkPeers();
     log("mesh checked");
+  }
+
+  /**
+   * Check boundary "combinability".
+   * 
+   * Divide the boundary into sections separated by tip vertices.
+   * Each section should have an even number of edges and the section should
+   * be symmetric regarding the edge lengths.
+   */
+  checkPeers(): void {
+    const startHE = this.outerspace.halfEdges().find(v => v.from.name.includes("^"));
+    if (!startHE) return; // apparently there aren't any tip vertices yet.
+    let count = 0, he = startHE, section = [];
+    do {
+      section.push(he);
+      if (he.to.name.includes("^")) {
+        assert(section.length % 2 === 0);
+        for (let i1 = 0, i2 = section.length - 1; i1 < i2; i1++, i2--) {
+          const he1 = section[i1], he2 = section[i2];
+          const l1 = heLength(he1), l2 = heLength(he2);
+          if (Math.abs(l1 - l2) > 1e-8) fail(
+            `outerspace edges ${he1.from.name} --- ${he1.to.name}, ${he2.to.name} --- ${he2.from.name} have different lengths: ${l1}, ${l2}`
+          );
+          // log(
+          //   `outerspace edges ${he1.from.name} --- ${he1.to.name}, ${he2.to.name} --- ${he2.from.name} have identical length ${l1.toFixed(5)}`
+          // );
+        }
+        section = [];
+      }
+      if (++count >= 50) fail(`edge-length loop ran away`);
+    } while ((he = he.next) !== startHE);
   }
 
   logMesh() {
@@ -739,6 +771,8 @@ class Mesh extends MeshG<VData, LData, EData> {
     return findUnique(p.loops(), l => l !== this.outerspace && [...l.vertices()].includes(q));
   }
 }
+
+const heLength = (he: HalfEdge) => distance(he.from.d.pos, he.to.d.pos);
 
 /**
  * Return a vector
