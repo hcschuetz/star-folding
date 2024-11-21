@@ -50,12 +50,12 @@ export function App() {
     let error = null;
     const log = (...args: any[]) => { logText += args.join(" ") + "\n"; };
     setLogger(log);
-    let mesh = new MyMesh(log, fail);
+    const mesh = new MyMesh(log, fail);
 
-    const vtxToV3 = (v: Vertex) => mvToV3(mesh.pos(v));
     function emitPhase(logTitle: string) {
       console.log("emitting phase:", logTitle);
-      const {vertices, loops} = mesh;
+      const {vertices, loops, pos} = mesh;
+      const vtxToV3 = (v: Vertex) => mvToV3(pos(v));
       phasesList.push({
         logTitle, logText, error,
         vertices: vertices.values().map(vtxToV3).toArray(),
@@ -65,7 +65,7 @@ export function App() {
           .map(w => [vtxToV3(v), vtxToV3(w)] as [V3, V3])
         ).toArray(),
         triangles: loops.values().filter(l => l !== mesh.boundary).flatMap(l =>
-          triangulate(l.vertices().map(v => mesh.pos(v)).toArray())
+          triangulate(l.vertices().map(v => pos(v)).toArray())
           .map(triangle => triangle.map(mvToV3))
         ).toArray(),
       });
