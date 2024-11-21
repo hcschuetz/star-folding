@@ -7,13 +7,12 @@ import * as G from "@babylonjs/gui";
 import './style.css';
 import { assert, choose, count, fail, findUnique, getLines, log, setLogger } from './utils';
 import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
-import { findHE, HalfEdgeG, LoopG, MeshG, VertexG } from './mesh';
+import { findHE, HalfEdge, Loop, Mesh, Vertex } from './mesh';
 import { initialActionsDef, initialPolygonDef } from './init';
 import triangulate from './triangulate';
 
 const v3 = (...args: number[]) => new V3(...args);
 const mvToV3 = (mv: MV) => v3(mv.value("x"), mv.value("y"), mv.value("z"));
-const vtxToV3 = (v: Vertex) => mvToV3(v.d.pos);
 
 type PhaseData = {
   logTitle: string;
@@ -51,8 +50,9 @@ export function App() {
     let error = null;
     const log = (...args: any[]) => { logText += args.join(" ") + "\n"; };
     setLogger(log);
-    let mesh = new Mesh(log, fail);
+    let mesh = new MyMesh(log, fail);
 
+    const vtxToV3 = (v: Vertex) => mvToV3(mesh.pos(v));
     function emitPhase(logTitle: string) {
       console.log("emitting phase:", logTitle);
       const {vertices, loops} = mesh;
@@ -65,7 +65,7 @@ export function App() {
           .map(w => [vtxToV3(v), vtxToV3(w)] as [V3, V3])
         ).toArray(),
         triangles: loops.values().filter(l => l !== mesh.boundary).flatMap(l =>
-          triangulate(l.vertices().map(v => v.d.pos).toArray())
+          triangulate(l.vertices().map(v => mesh.pos(v)).toArray())
           .map(triangle => triangle.map(mvToV3))
         ).toArray(),
       });
@@ -393,33 +393,11 @@ const steps = {
 };
 
 
-type VData = { pos: MV };
-type LData = void;
-type EData = void;
-type Loop = LoopG<VData, LData, EData>;
-type Vertex = VertexG<VData, LData, EData>;
-type HalfEdge = HalfEdgeG<VData, LData, EData>;
-
-/**
- * Would merging the two loops adjacent to `he` and its twin result
- * in a flat loop?
- */
-function isBetweenCoplanarLoops(he: HalfEdge): boolean {
-  assert(isLoopFlat(he.loop));
-  assert(isLoopFlat(he.twin.loop));
-  // Assuming that each of the two loops is already flat, we only need to
-  // check if they have the same normalized directed areas.
-  // If one of the loops is degenerated, the union is flat as well.
-  const a1 = directedArea(he.loop), a2 = directedArea(he.twin.loop);
-  const a1n = XYZ.norm(a1), a2n = XYZ.norm(a2);
-  return (
-    a1n < 1e-8 || a2n < 1e-8 ||
-    closeTo0(XYZ.minus(XYZ.scale(1/a1n, a1), XYZ.scale(1/a2n, a2)))
-  );
-}
-
-class Mesh extends MeshG<VData, LData, EData> {
+class MyMesh extends Mesh {
   boundary: Loop;
+  positions = new WeakMap<Vertex, MV>();
+  setPos = (v: Vertex, pos: MV) => this.positions.set(v, pos);
+  pos = (v: Vertex) => this.positions.get(v);
 
   constructor(
     log: (...args: any[]) => unknown,
@@ -431,9 +409,10 @@ class Mesh extends MeshG<VData, LData, EData> {
   setup(def: string) {
     const [innerHE, outerHE] = this.addCore();
     this.boundary = outerHE.loop
-    Object.assign(innerHE.loop, {name: "star"});
-    Object.assign(outerHE.loop, {name: "boundary"});
-    Object.assign(innerHE.to, {name: "dummy", d: {pos: XYZ.vec([0, 0, 0])}});
+    innerHE.loop.name = "star";
+    outerHE.loop.name = "boundary";
+    innerHE.to.name = "dummy";
+    this.setPos(innerHE.to, XYZ.vec([0, 0, 0]))
     this.logMesh();
     this.checkWithData();
 
@@ -450,13 +429,13 @@ class Mesh extends MeshG<VData, LData, EData> {
 
       const [innerHE0, outerHE0] = this.splitEdgeAcross(outerHE);  
       const tip = innerHE0.from;
-      tip.d = {pos: fromPos};
+      this.setPos(tip, fromPos);
       tips.push(tip);
 
       const [innerHE1, outerHE1] = this.splitEdgeAcross(outerHE);
       const inward = innerHE1.from;
       inward.name = name;
-      inward.d = {pos: innerPos};
+      this.setPos(inward, innerPos);
     }
 
     if (XYZ.normSquared(currentPos) > 1e-12) fail(
@@ -477,7 +456,7 @@ class Mesh extends MeshG<VData, LData, EData> {
     this.check();
 
     for (const loop of this.loops) {
-      if (loop !== this.boundary && !isLoopFlat(loop)) {
+      if (loop !== this.boundary && !this.isLoopFlat(loop)) {
         fail(`face ${loop} not flat`);
       }
     }
@@ -512,14 +491,14 @@ class Mesh extends MeshG<VData, LData, EData> {
       if (he.to.name.includes("^")) {
         assert(section.length % 2 === 0);
 
-        const lengths = section.map(heLength);
+        const lengths = section.map(he => this.heLength(he));
         while (lengths.length > 0) {
           const i = lengths.findIndex((len, i) =>
             i < lengths.length - 1 && Math.abs(len - lengths[i+1]) < 1e-8
           );
           if (i === -1) fail(
             `boundary section not foldable:${section.map(he =>
-              `\n  ${heLength(he).toFixed(5)}: ${he.from.name} -- ${he.to.name}`).join("")
+              `\n  ${this.heLength(he).toFixed(5)}: ${he.from.name} -- ${he.to.name}`).join("")
             }`
           );
           lengths.splice(i, 2);
@@ -541,13 +520,13 @@ class Mesh extends MeshG<VData, LData, EData> {
       const neighbors = [...v.neighbors()];
       log(
         v.toString().padEnd(15), v.firstHalfEdgeOut,
-        v.d?.pos.toString().padEnd(50) ?? "MISSING",
+        this.pos(v).toString().padEnd(50) ?? "MISSING",
         neighbors.length, "neighbors:", neighbors.join(" ").padEnd(35),
         "faces:", [...v.loops()].join(" "),
       );
     }
     for (const [vi, vj] of choose([...vertices], 2)) {
-      const dist = distance(vi.d.pos, vj.d.pos);
+      const dist = this.distance(vi, vj);
       if (dist < 1e-4) log(`Nearby: ${vi}, ${vj} (${dist})`);
     }
     log(`${
@@ -563,7 +542,7 @@ class Mesh extends MeshG<VData, LData, EData> {
         if (he.twin.loop === this.boundary) continue;
         if (he.from.name > he.to.name) continue; // avoid duplicate output
         // TODO compute a directed angle (as seen when looking along the half-edge)?
-        const angle = XYZ.getAngle(faceOrientation(he), faceOrientation(he.twin));
+        const angle = XYZ.getAngle(this.faceOrientation(he), this.faceOrientation(he.twin));
         edgeMessages.push(
           `${he.from.name}->${he.to.name}: ${(angle/TAU*360).toFixed(5)}° ${
             he.from} ==[${he}(${he.loop})|${he.twin}(${he.twin.loop})]==> ${he.to}`
@@ -574,7 +553,7 @@ class Mesh extends MeshG<VData, LData, EData> {
   }
 
   bend2(args: string[]) {
-    const {vertices} = this;
+    const {vertices, pos} = this;
 
     if (args.length !== 4) fail("bend2 expects 4 args");
     const choice = args.shift();
@@ -630,16 +609,16 @@ class Mesh extends MeshG<VData, LData, EData> {
     assert(beyond1.isDisjointFrom(beyond2));
 
     const [inters1 , inters2] = intersect3Spheres(
-      s1.d.pos, t1.d.pos,
-      q.d.pos, t1/* or t2 */.d.pos,
-      s2.d.pos, t2.d.pos,
+      pos(s1), pos(t1),
+      pos(q ), pos(t1/* or t2 */),
+      pos(s2), pos(t2),
     );
     const inters = choice === "+" ? inters2 : inters1;
 
     // TODO simplify geometry?
-    rotatePoints(projectPointToLine(t1.d.pos, s1.d.pos, q.d.pos), t1.d.pos, inters, beyond1.values().map(v => v.d));
-    rotatePoints(projectPointToLine(t2.d.pos, s2.d.pos, q.d.pos), t2.d.pos, inters, beyond2.values().map(v => v.d));
-    assert(distance(t1.d.pos, t2.d.pos) < 1e-8);
+    this.rotatePoints(projectPointToLine(pos(t1), pos(s1), pos(q)), pos(t1), inters, beyond1);
+    this.rotatePoints(projectPointToLine(pos(t2), pos(s2), pos(q)), pos(t2), inters, beyond2);
+    assert(this.distance(t1, t2) < 1e-8);
 
     // TODO Let MeshG provide a method combining splitLoop and contractEdge?
     // This would avoid creating a temporary edge and a temporary loop.
@@ -649,14 +628,14 @@ class Mesh extends MeshG<VData, LData, EData> {
     t1.name = mergeNames(t2.name, t1.name);
 
     const he_tip1_q_aux = findHE(t1, q);
-    if (isBetweenCoplanarLoops(he_tip1_q_aux)) {
+    if (this.isBetweenCoplanarLoops(he_tip1_q_aux)) {
       // TODO create a test case for this situation
       this.dropEdge(he_tip1_q_aux); 
     }
   }
 
   reattach(args: string[]) {
-    const {vertices} = this;
+    const {vertices, pos} = this;
 
     if (args.length !== 2) fail(`reattach expects 2 args`);
     const [pName, qName] = args;
@@ -668,16 +647,16 @@ class Mesh extends MeshG<VData, LData, EData> {
     const he_boundary_p = findUnique([...p.halfEdgesIn()], he => he.loop === this.boundary);
     const he_boundary_q = findUnique([...q.halfEdgesIn()], he => he.loop === this.boundary);
     const he_q_boundary = he_boundary_q.next;
+    assert(Math.abs(this.heLength(he_boundary_q) - this.heLength(he_q_boundary)) < 1e-8);
     const t1 = he_boundary_q.from;
     const t2 = he_q_boundary.to;
-    assert(Math.abs(distance(t1.d.pos, q.d.pos) - distance(t2.d.pos, q.d.pos)) < 1e-8);
 
     const [he_pq_A, he_qp_A] = this.splitLoop(he_face_p, he_face_q, {create: "right"});
     const [he_qp_B, he_pq_B] = this.splitLoop(he_pq_A, he_face_p, {create: "left"});
-    log("AB", he_qp_A.loop.name, he_qp_A.loop.d, he_qp_B.loop.name, he_qp_B.loop.d);
+    log("AB", he_qp_A.loop.name, he_qp_B.loop.name);
     const [he_p0_p1, he_p1_p0] = this.splitVertex(he_qp_B, he_boundary_p, {create: "both"});
-    he_p0_p1.from.d = {pos: p.d.pos};
-    he_p0_p1.to.d = {pos: p.d.pos};
+    this.setPos(he_p0_p1.from, pos(p));
+    this.setPos(he_p0_p1.to, pos(p));
     vertices.delete(p);
     this.dropEdge(he_p0_p1);
 
@@ -705,36 +684,67 @@ class Mesh extends MeshG<VData, LData, EData> {
     // The following rotation of the snippet vertices ensures
     // - that edges q-t1 and q-t2 coincide and
     // - that the snippet fits with q and pNew (instead of p):
-    log("before rot1", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
-      "dist:", distance(fromV.d.pos, toV.d.pos),
-      `{${part.values().map(v => v.d.pos).toArray().join(" ")}}`);
-    rotatePoints(q.d.pos, fromV.d.pos, toV.d.pos, part.values().map(v => v.d));
-    log("after rot1", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
-      `{${part.values().map(v => v.d.pos).toArray().join(" ")}}`);
-    assert(closeTo0(XYZ.minus(fromV.d.pos, toV.d.pos)));
+    log("before rot1", q, pos(q), fromV, pos(fromV), toV, pos(toV),
+      "dist:", this.distance(fromV, toV),
+      `{${part.values().map(v => pos(v)).toArray().join(" ")}}`);
+    this.rotatePoints(pos(q), pos(fromV), pos(toV), part);
+    log("after rot1", q, pos(q), fromV, pos(fromV), toV, pos(toV),
+      "dist:", this.distance(fromV, toV),
+      `{${part.values().map(v => pos(v)).toArray().join(" ")}}`);
     // But still the two faces behind q-t1 and q-t2 might not be in a plane.
     // So we perform another rotation of the snippet around the newly
     // coinciding edges:
-    rotatePoints(
-      q.d.pos,
-      // TODO Avoid adding q.d.pos, which is subtracted immediately inside rotatePoints(...)
-      XYZ.plus(q.d.pos, faceOrientation(fromHE.twin)),
-      XYZ.plus(q.d.pos, XYZ.negate(faceOrientation(toHE.twin))),
-      part.values().map(v => v.d),
+    this.rotatePoints(
+      pos(q),
+      // TODO Avoid adding pos(q), which is subtracted immediately inside rotatePoints(...)
+      XYZ.plus(pos(q), this.faceOrientation(fromHE.twin)),
+      XYZ.plus(pos(q), XYZ.negate(this.faceOrientation(toHE.twin))),
+      part,
     );
-    log("after rot2", q, q.d.pos, fromV, fromV.d.pos, toV, toV.d.pos,
-      `{${part.values().map(v => v.d.pos).toArray().join(" ")}}`);
+    log("after rot2", q, pos(q), fromV, pos(fromV), toV, pos(toV),
+      "dist:", this.distance(fromV, toV),
+      `{${part.values().map(v => pos(v)).toArray().join(" ")}}`);
 
     const [he_t1_t2, he_t2_t1] =
       this.splitLoop(he_q_boundary, he_q_boundary.prev.prev, {create: "left"});
     const t = this.contractEdge(he_t1_t2);
     t.name = mergeNames(he_t1_t2.from.name, he_t1_t2.to.name);
     this.dropEdge(he_q_boundary);
-    if (!isBetweenCoplanarLoops(he_boundary_q)) fail(
+    if (!this.isBetweenCoplanarLoops(he_boundary_q)) fail(
       `faces not coplanar: ${he_boundary_q.loop} and ${he_boundary_q.twin}`
     );
     this.dropEdge(he_boundary_q);
     // TODO If more pairs of edges/vertices happen to align, merge them.
+  }
+
+  rotatePoints(pivot: MV, from: MV, to: MV, vertices: Set<Vertex>) {
+    const {pos, setPos} = this;
+    rotatePoints(pivot, from, to,
+      vertices.values().map(v => ({
+        // Backward-compatibility hack:
+        // Give rotatePoints(...) to read and write a member pos.
+        get pos() { return pos(v); },
+        set pos(value) { setPos(v, value)},
+      })).toArray(),
+    );
+  }
+
+  /**
+   * Would merging the two loops adjacent to `he` and its twin result
+   * in a flat loop?
+   */
+  isBetweenCoplanarLoops(he: HalfEdge): boolean {
+    assert(this.isLoopFlat(he.loop));
+    assert(this.isLoopFlat(he.twin.loop));
+    // Assuming that each of the two loops is already flat, we only need to
+    // check if they have the same normalized directed areas.
+    // If one of the loops is degenerated, the union is flat as well.
+    const a1 = this.directedArea(he.loop), a2 = this.directedArea(he.twin.loop);
+    const a1n = XYZ.norm(a1), a2n = XYZ.norm(a2);
+    return (
+      a1n < 1e-8 || a2n < 1e-8 ||
+      closeTo0(XYZ.minus(XYZ.scale(1/a1n, a1), XYZ.scale(1/a2n, a2)))
+    );
   }
 
   /**
@@ -749,37 +759,39 @@ class Mesh extends MeshG<VData, LData, EData> {
     );
     return found[0];
   }
-}
 
-const heLength = (he: HalfEdge) => distance(he.from.d.pos, he.to.d.pos);
+  distance = (from: Vertex, to: Vertex) => distance(this.pos(from), this.pos(to));
 
-function isLoopFlat(loop: Loop) {
-  // This is a bit too optimistic:  A non-flat loop with total area 0 will be
-  // reported as flat.
-  const a = directedArea(loop);
-  for (const {from, to} of loop.halfEdges()) {
-    if (!closeTo0(XYZ.wedgeProduct(a, XYZ.minus(to.d.pos, from.d.pos)))) {
-      return false;
+  heLength = (he: HalfEdge) => this.distance(he.from, he.to);
+
+  isLoopFlat(loop: Loop) {
+    // This is a bit too optimistic:  A non-flat loop with total area 0 will be
+    // reported as flat.
+    const a = this.directedArea(loop);
+    for (const {from, to} of loop.halfEdges()) {
+      if (!closeTo0(XYZ.wedgeProduct(a, XYZ.minus(this.pos(to), this.pos(from))))) {
+        return false;
+      }
     }
+    return true;
   }
-  return true;
-}
-
-/**
- * Return a vector
- * - parallel to the plane of `he.loop` and
- * - orthogonal to the direction of `he`.
- * 
- * (It does not matter if the result points from the half edge into the loop or
- * in the opposite direction.  Consistent behavior suffices.)
- */
-const faceOrientation = (he: HalfEdge) =>
-  XYZ.contractLeft(XYZ.minus(he.to.d.pos, he.from.d.pos), directedArea(he.loop));
-
-const directedArea = (loop: Loop) => loop.halfEdges().reduce(
-  (acc, {from, to}) => XYZ.plus(acc, XYZ.wedgeProduct(from.d.pos, to.d.pos)),
-  XYZ.zero(),
-);
+  
+  /**
+   * Return a vector
+   * - parallel to the plane of `he.loop` and
+   * - orthogonal to the direction of `he`.
+   * 
+   * (It does not matter if the result points from the half edge into the loop or
+   * in the opposite direction.  Consistent behavior suffices.)
+   */
+  faceOrientation = (he: HalfEdge) =>
+    XYZ.contractLeft(XYZ.minus(this.pos(he.to), this.pos(he.from)), this.directedArea(he.loop));
+  
+  directedArea = (loop: Loop) => loop.halfEdges().reduce(
+    (acc, {from, to}) => XYZ.plus(acc, XYZ.wedgeProduct(this.pos(from), this.pos(to))),
+    XYZ.zero(),
+  );
+  }
 
 /**
  * Return the vertices reachable from start without crossing the border.

@@ -6,9 +6,9 @@ abstract class WithId {
   }
 }
 
-abstract class Named<V,L,E> extends WithId {
+abstract class Named extends WithId {
   constructor(
-    public mesh: MeshG<V,L,E>,
+    public mesh: Mesh,
     public name: string,
   ) { super(); }
 }
@@ -16,29 +16,27 @@ abstract class Named<V,L,E> extends WithId {
 // Added suffix "G" to exported generic classes so that application code can
 // use the plain names for the specific instances (without `import ... as`).
 
-export class HalfEdgeG<V,L,E> extends WithId {
-  loop: LoopG<V,L,E>;
+export class HalfEdge extends WithId {
+  loop: Loop;
 
-  prev: HalfEdgeG<V,L,E>;
-  twin: HalfEdgeG<V,L,E>;
-  next: HalfEdgeG<V,L,E>;
+  prev: HalfEdge;
+  twin: HalfEdge;
+  next: HalfEdge;
 
-  to: VertexG<V,L,E>;
+  to: Vertex;
   alive = true;
-  d?: E;
 
   get from() { return this.twin.to; }
 
   toString() { return "he" + this.id + (this.alive ? "" : "[dead]"); }
 }
 
-export type Edge<V,L,E> = [HalfEdgeG<V,L,E>, HalfEdgeG<V,L,E>];
+export type Edge = [HalfEdge, HalfEdge];
 
 const SIZE_LIMIT = 50;
 
-export class VertexG<V,L,E> extends Named<V,L,E> {
-  firstHalfEdgeOut: HalfEdgeG<V,L,E>;
-  d?: V;
+export class Vertex extends Named {
+  firstHalfEdgeOut: HalfEdge;
 
   *halfEdgesOut() {
     let he = this.firstHalfEdgeOut;
@@ -80,9 +78,8 @@ export class VertexG<V,L,E> extends Named<V,L,E> {
   }
 }
 
-export class LoopG<V,L,E> extends Named<V,L,E> {
-  firstHalfEdge: HalfEdgeG<V,L,E>;
-  d?: L;
+export class Loop extends Named {
+  firstHalfEdge: HalfEdge;
 
   *halfEdges() {
     let he = this.firstHalfEdge;
@@ -115,9 +112,9 @@ export class LoopG<V,L,E> extends Named<V,L,E> {
   toString() { return `l${this.id}/${this.name}`; }
 }
 
-export class MeshG<V,L,E> {
-  vertices = new Set<VertexG<V,L,E>>();
-  loops = new Set<LoopG<V,L,E>>();
+export class Mesh {
+  vertices = new Set<Vertex>();
+  loops = new Set<Loop>();
 
   constructor(
     public log: (...args: any[]) => unknown,
@@ -125,13 +122,13 @@ export class MeshG<V,L,E> {
   ) {}
 
   makeVertex(name: string) {
-    const v = new VertexG<V,L,E>(this, name);
+    const v = new Vertex(this, name);
     this.vertices.add(v);
     return v;
   }
 
   makeLoop(name: string) {
-    const l = new LoopG<V,L,E>(this, name);
+    const l = new Loop(this, name);
     this.loops.add(l);
     return l;
   }
@@ -144,10 +141,10 @@ export class MeshG<V,L,E> {
    * - the half edge adjacent to `l1` and pointing from `v1` to `v0`.
    */
   makeEdge(
-    l0: LoopG<V,L,E>, l1: LoopG<V,L,E>,
-    v0: VertexG<V,L,E>, v1: VertexG<V,L,E>
-  ): Edge<V,L,E> {
-    const he0 = new HalfEdgeG<V,L,E>(), he1 = new HalfEdgeG<V,L,E>();
+    l0: Loop, l1: Loop,
+    v0: Vertex, v1: Vertex
+  ): Edge {
+    const he0 = new HalfEdge(), he1 = new HalfEdge();
     he0.twin = he1; he1.twin = he0;
     he0.loop = l0 ; he1.loop = l1 ;
     he0.to   = v1 ; he1.to   = v0 ;
@@ -183,10 +180,10 @@ export class MeshG<V,L,E> {
    * and the loops adjacent to the input half edges.
    */
   splitVertex(
-    he0: HalfEdgeG<V,L,E>,
-    he1: HalfEdgeG<V,L,E>,
+    he0: HalfEdge,
+    he1: HalfEdge,
     options?: {create: "left" | "right" | "both"},
-  ): Edge<V,L,E> {
+  ): Edge {
     const v = he0.to;
     if (he1.to !== v) this.fail(
       `splitVertex: parameters point to different vertices: ${v} !== ${he1.to}`
@@ -217,10 +214,10 @@ export class MeshG<V,L,E> {
    * and the `.to` ends of the input half edges.
    */
   splitLoop(
-    he0: HalfEdgeG<V,L,E>,
-    he1: HalfEdgeG<V,L,E>,
+    he0: HalfEdge,
+    he1: HalfEdge,
     options?: {create: "left" | "right" | "both"},
-  ): Edge<V,L,E> {
+  ): Edge {
     const l = he0.loop;
     if (he1.loop !== l) this.fail(
       `splitLoop: parameters point to different loops: ${l} !== ${he1.loop}`
@@ -247,11 +244,11 @@ export class MeshG<V,L,E> {
     return newEdge;
   }
 
-  splitEdgeAcross(he: HalfEdgeG<V,L,E>) {
+  splitEdgeAcross(he: HalfEdge) {
     return this.splitVertex(he.twin.prev, he, {create: "left"});
   }
 
-  splitEdgeAlong(he: HalfEdgeG<V,L,E>) {
+  splitEdgeAlong(he: HalfEdge) {
     // TODO check create option
     return this.splitLoop(he, he.prev, {create: "left"});
   }
@@ -260,7 +257,7 @@ export class MeshG<V,L,E> {
    * Eliminate edge `(he, he.twin)` and merge vertex `he.to` into `he.from`.
    * Return the latter.
    */
-  contractEdge(he: HalfEdgeG<V,L,E>) {
+  contractEdge(he: HalfEdge) {
     const {
       to, loop, prev, next,
       twin: {to: from, loop: twin_loop, prev: twin_prev, next: twin_next},
@@ -291,7 +288,7 @@ export class MeshG<V,L,E> {
    * Eliminate edge `(he, he.twin)` and merge `he.loop` into `he.twin.loop`.
    * Return the latter.
    */
-  dropEdge(he: HalfEdgeG<V,L,E>) {
+  dropEdge(he: HalfEdge) {
     const {
       to, loop, prev, next,
       twin: {to: from, loop: twin_loop, prev: twin_prev, next: twin_next},
@@ -325,7 +322,7 @@ export class MeshG<V,L,E> {
   check() {
     const {vertices, loops, fail} = this;
 
-    function checkHE(he: HalfEdgeG<V,L,E>) {
+    function checkHE(he: HalfEdge) {
       if (!he.alive) fail(
         `${he} is not alive`
       );
@@ -380,8 +377,8 @@ export class MeshG<V,L,E> {
   }
 }
 
-export function findHE<V,L,E>(from: VertexG<V,L,E>, to: VertexG<V,L,E>) {
-  const results: HalfEdgeG<V,L,E>[] = [];
+export function findHE(from: Vertex, to: Vertex) {
+  const results: HalfEdge[] = [];
   for (const he of from.halfEdgesOut()) {
     if (he.to === to) {
       results.push(he);
@@ -393,7 +390,7 @@ export function findHE<V,L,E>(from: VertexG<V,L,E>, to: VertexG<V,L,E>) {
   return results[0];
 }
 
-export function chainHEs<V,L,E>(first: HalfEdgeG<V,L,E>, ...rest: HalfEdgeG<V,L,E>[]) {
+export function chainHEs(first: HalfEdge, ...rest: HalfEdge[]) {
   let prev = first;
   for (const he of rest) {
     he.prev = prev;
