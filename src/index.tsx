@@ -500,27 +500,31 @@ class Mesh extends MeshG<VData, LData, EData> {
    * Check boundary "combinability".
    * 
    * Divide the boundary into sections separated by tip vertices.
-   * Each section should have an even number of edges and the section should
-   * be symmetric regarding the edge lengths.
+   * Each section should have an even number of edges and the section should be
+   * completely "foldable" by removing pairs of adjacent edges of equal length.
    */
   checkPeers(): void {
     const startHE = this.boundary.halfEdges().find(v => v.from.name.includes("^"));
     if (!startHE) return; // apparently there aren't any tip vertices yet.
-    let count = 0, he = startHE, section = [];
+    let count = 0, he = startHE, section: HalfEdge[] = [];
     do {
       section.push(he);
       if (he.to.name.includes("^")) {
         assert(section.length % 2 === 0);
-        for (let i1 = 0, i2 = section.length - 1; i1 < i2; i1++, i2--) {
-          const he1 = section[i1], he2 = section[i2];
-          const l1 = heLength(he1), l2 = heLength(he2);
-          if (Math.abs(l1 - l2) > 1e-8) fail(
-            `boundary edges ${he1.from.name} --- ${he1.to.name}, ${he2.to.name} --- ${he2.from.name} have different lengths: ${l1}, ${l2}`
+
+        const lengths = section.map(heLength);
+        while (lengths.length > 0) {
+          const i = lengths.findIndex((len, i) =>
+            i < lengths.length - 1 && Math.abs(len - lengths[i+1]) < 1e-8
           );
-          // log(
-          //   `boundary edges ${he1.from.name} --- ${he1.to.name}, ${he2.to.name} --- ${he2.from.name} have identical length ${l1.toFixed(5)}`
-          // );
+          if (i === -1) fail(
+            `boundary section not foldable:${section.map(he =>
+              `\n  ${heLength(he).toFixed(5)}: ${he.from.name} -- ${he.to.name}`).join("")
+            }`
+          );
+          lengths.splice(i, 2);
         }
+
         section = [];
       }
       if (++count >= 50) fail(`edge-length loop ran away`);
