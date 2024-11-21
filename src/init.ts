@@ -32,3 +32,29 @@ reattach i.0 h
 bend2 + h k j.1
 reattach j.0 h
 `;
+
+/*
+Icosahedron
+===========
+
+a 9 8
+b 7
+c 6
+d 5
+e 4
+f 3
+g 2
+h 1
+i 12
+j 11
+k 10
+
+reattach k a
+reattach i j
+reattach j a
+reattach k b
+reattach e d
+reattach i.0 h
+reattach g f
+
+*/
