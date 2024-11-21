@@ -27,10 +27,6 @@ type PhaseData = {
 }
 
 export function App() {
-  const polygonDefElem = useRef<HTMLTextAreaElement>();
-  const actionsDefElem = useRef<HTMLTextAreaElement>();
-  const phaseSelectElem = useRef<HTMLSelectElement>();
-
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
   const [showVertices, setShowVertices] = useState(true);
@@ -38,6 +34,10 @@ export function App() {
   const [showEdges, setShowEdges] = useState(true);
   const [showFaces, setShowFaces] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
+
+  const polygonDefElem = useRef<HTMLTextAreaElement>();
+  const actionsDefElem = useRef<HTMLTextAreaElement>();
+  const phaseSelectElem = useRef<HTMLSelectElement>();
   const canvas = useRef<HTMLCanvasElement>();
 
   function run() {
