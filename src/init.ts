@@ -28,4 +28,7 @@ bend2 + e f k
 // bend2 + i.0 h f
 reattach k h
 // bend2 + j.0 h i.0
+reattach i.0 h
+bend2 + h k j.1
+reattach j.0 h
 `;
