@@ -26,6 +26,8 @@ type PhaseData = {
   triangles: V3[][],
 }
 
+const cmdNames = ["bend", "bend2", "reattach"];
+
 export function App() {
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
@@ -808,8 +810,6 @@ function collectVertices(start: Vertex, border: Set<Vertex>): Set<Vertex> {
   log(`collected: {${[...collected].join(", ")}}`);
   return collected;
 }
-
-const cmdNames = ["bend2", "reattach"];
 
 const mergeNames = (a: string, b: string) =>
   (a.endsWith(".0") || a.endsWith(".1")) &&
