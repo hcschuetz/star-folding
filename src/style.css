@@ -7,7 +7,7 @@ body {
 	padding: 0;
 }
 
-textarea, button, canvas, .explanation, .display-controls, .output {
+textarea, button, canvas, .explanation, .controls, .output {
 	margin: 8px;
 }
 

@@ -8,7 +8,7 @@ import './style.css';
 import { assert, choose, count, fail, findUnique, getLines, log, setLogger } from './utils';
 import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
 import { findHE, HalfEdge, Loop, Mesh, Vertex } from './mesh';
-import { initialActionsDef, initialPolygonDef } from './init';
+import examples from './examples';
 import triangulate from './triangulate';
 
 const v3 = (...args: number[]) => new V3(...args);
@@ -29,6 +29,7 @@ type PhaseData = {
 const cmdNames = ["bend", "bend2", "reattach"];
 
 export function App() {
+  const [example, setExample] = useState<string>("thurston_fig_15");
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
   const [showVertices, setShowVertices] = useState(true);
@@ -133,17 +134,34 @@ export function App() {
     <>
       <div style={{display: "flex"}}>
         <div style={{width: "fit-content"}}>
+          <div class="controls">
+            Select example:
+            <br/>
+            <select onChange={e => {
+              setExample(e.target["value"]);
+              // Delaying run() so that it sees the updated example:
+              setTimeout(run, 0);
+            }}>
+              {Object.entries(examples).map(([key, value]) => (
+                <option value={key}>{value.label ?? key}</option>
+              ))}
+            </select>
+            <details>
+              <summary>example info</summary>
+              {examples[example].info.trim()}
+            </details>
+          </div>
           <textarea ref={polygonDefElem}>
-            {initialPolygonDef.trim()}
+            {examples[example].setup.trim()}
           </textarea>
           <br/>
           <textarea ref={actionsDefElem}>
-            {initialActionsDef.trim()}
+            {examples[example].transform.trim()}
           </textarea>
           <br/>
           <button onClick={run}>run</button>
           {phases.length > 0 && (
-            <div class="display-controls">
+            <div class="controls">
               {
                 phases.at(-1).error
                 ? <a href={`#phase-${phases.length}`}>Failure at step #{phases.length}</a>
