@@ -554,6 +554,53 @@ class MyMesh extends Mesh {
     log(edgeMessages.sort().join("\n"));
   }
 
+  bend(args: string[]) {
+    const {vertices, pos} = this;
+
+    if (args.length < 3) fail("bend expects 3 or more args");
+    const angle = Number.parseFloat(args.shift());
+    if (Number.isNaN(angle)) fail(
+      "first arg of bend should be a number (an angle)."
+    );
+    const [first, ...rest] = args.map(name => {
+      const found = vertices.values().filter(v => v.name === name).toArray();
+      if (found.length !== 1) fail(
+        `found ${found.length} vertices with name "${name}".`
+      );
+      const v = found[0];
+      if (!v.loops().some(l => l === this.boundary)) fail(
+        `vertex ${v} is not adjacent to the boundary.`
+      );
+      return v;
+    });
+
+    let prev = first;
+    for (const current of rest) {
+      const face = this.findUniqueFace(prev, current);
+      const he_face_prev = findUnique(face.halfEdges(), he => he.to === prev);
+      const he_face_current = findUnique(face.halfEdges(), he => he.to === current);
+      const beyond = collectVertices(he_face_current.from, new Set([prev, current]));
+      log("step:", prev, current, `{${beyond.values().toArray().join(" ")}}`)
+      const [heSplit] = this.splitLoop(he_face_current, he_face_prev, {create: "left"});
+      heSplit.loop.name = `split(${prev.name}-${current.name})`;
+
+      // TODO simplify geometry
+      const pivot = pos(current);
+      const from = this.faceOrientation(heSplit);
+      const to = XYZ.sandwich(
+        XYZ.exp(XYZ.scale(-angle/2, XYZ.normalize(XYZ.dual(XYZ.minus(pos(prev), pivot)))))
+      )(from);
+      this.rotatePoints(
+        pivot,
+        XYZ.plus(pivot, from),
+        XYZ.plus(pivot, to),
+        beyond,
+      );
+
+      prev = current;
+    }
+  }
+
   bend2(args: string[]) {
     const {vertices, pos} = this;
 

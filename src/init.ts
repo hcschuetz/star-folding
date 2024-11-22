@@ -1,42 +1,4 @@
 export const initialPolygonDef = `
-a 11
-b 10
-c 10 9
-d 9 8
-e 7
-f 6 6
-g 5
-h 4 4
-i 4 3
-j 2 2
-k 1 12 12
-`;
-
-export const initialActionsDef = `
-reattach j i
-reattach i k
-reattach b c
-reattach e d
-reattach j.1 a
-bend2 + k a b.0
-bend2 + k c d
-bend2 + e.0 b j.1
-bend2 + k d f
-// bend2 + j.1 k h
-bend2 + f g h
-bend2 + e f k
-// bend2 + i.0 h f
-reattach k h
-// bend2 + j.0 h i.0
-reattach i.0 h
-bend2 + h k j.1
-reattach j.0 h
-`;
-
-/*
-Icosahedron
-===========
-
 a 9 8
 b 7
 c 6
@@ -48,7 +10,9 @@ h 1
 i 12
 j 11
 k 10
+`;
 
+export const initialActionsDef = `
 reattach k a
 reattach i j
 reattach j a
@@ -57,4 +21,22 @@ reattach e d
 reattach i.0 h
 reattach g f
 
-*/
+// At this point the
+// icosahedron faces
+// are "reunited".
+// Now we have to
+// introduce edges
+// to separate them
+// from one another.
+
+// .729 = 41.8° =
+// 180° - 138.2°
+// where 138.2° is
+// the dihedral
+// angle in an
+// icosahedron
+bend .729 k.1 c e.0
+bend .729 i.0.0 g.1 h j.0
+bend .729 i.1 k.0 j.1 b c d b a h f a d f e.1 g.0
+
+`;

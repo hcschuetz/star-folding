@@ -62,6 +62,27 @@
 				Now for the folding operations in the second input box below.
 				The following operations are supported.
 			</p>
+			<h3>bend</h3>
+			<p>
+				A very low-level operation is to split a face with a new edge and to
+				bend the edge by some amount.  "bend 1.2 a b" creates a new edge between
+				vertices a and b (which should be adjacent to the boundary and to a
+				common face).  The edge is bent by 1.2 radians (in one direction; if you
+				want to bend in the other direction, use -1.2).  That is, the dihedral
+				angle between the two new faces is &pi; - 1.2.
+			</p>
+			<p>
+				For convenience you can write "bend 1.2 a b c a d", which introduces
+				edges from a to b, from b to c, from c to a, and from a to d, each
+				bent by the same angle.
+			</p>
+			<p>
+				The primary disadvantage of this operation is that you have to know
+				the bending angle in advance.  We would rather describe only the
+				topology (where to insert new edges and which boundary edges to align)
+				and to let the computer figure out the geometry (vertex positions,
+				angles, edge lengths).
+			</p>
 			<h3>bend2</h3>
 			<p>
 				One basic operation is to select 3 inner vertices P, Q, and R and
