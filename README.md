@@ -190,7 +190,7 @@ But we need solvers for more complex constraints.
 It might even be impossible to solve the entire constraint problem as a
 sequence of "local" constraint-solving steps.
 
-The "optimize" operation approximates a solution of the global
+The `optimize` operation approximates a solution of the global
 constraint problem iteratively.
 The constraints are:
 - Edges should keep their lengths.
@@ -198,10 +198,10 @@ The constraints are:
   (That is, faces should stay flat and
   angles between edges should be preserved.)
 - The star tips should coincide.
-- Vertices that have been replicated by "reattach" operations
+- Vertices that have been replicated by `reattach` operations
   should coincide.
 
-Actually the current implementation of "optimize" does not take care
+Actually the current implementation of `optimize` does not take care
 of faces and angles.  To avoid this problem, the manifold should be fully
 triangulated (using `bend` and `bend2`) before calling `optimize`.
 
