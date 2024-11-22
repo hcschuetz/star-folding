@@ -6,11 +6,11 @@ export type Example = {
 };
 
 const examples: Record<string, Example> = {
-thurston_fig_15: {
-  label: "Thurston",
-  info: `See https://arxiv.org/pdf/math/9801088, Figure 15,
-and https://mathstodon.xyz/@johncarlosbaez/113369111554515465`,
-  setup:`
+  thurston_fig_15: {
+    label: "Thurston",
+    info: `From https://arxiv.org/pdf/math/9801088, Figure 15;
+see also https://mathstodon.xyz/@johncarlosbaez/113369111554515465`,
+    setup:`
 a 11
 b 10
 c 10 9
@@ -23,7 +23,7 @@ i 4 3
 j 2 2
 k 1 12 12
 `,
-  transform: `
+    transform: `
 reattach j i
 reattach i k
 reattach b c
@@ -43,11 +43,10 @@ reattach i.0 h
 bend2 + h k j.1
 reattach j.0 h
 `},
-
-westendorp_icosahedron: {
-  label: "Icosahedron",
-  info: "See https://mathstodon.xyz/@GerardWestendorp/113374197385229562",
-  setup: `
+  westendorp_icosahedron: {
+    label: "Icosahedron",
+    info: "From https://mathstodon.xyz/@GerardWestendorp/113374197385229562",
+    setup: `
 a 9 8
 b 7
 c 6
@@ -60,7 +59,7 @@ i 12
 j 11
 k 10
 `,
-  transform: `
+    transform: `
 reattach k a
 reattach i j
 reattach j a
@@ -69,25 +68,47 @@ reattach e d
 reattach i.0 h
 reattach g f
 
-// At this point the
-// icosahedron faces
-// are "reunited".
-// Now we have to
-// introduce edges
-// to separate them
-// from one another.
+// At this point the icosahedron
+// faces are "reunited".
+// Now add edges to separate
+// them from one another.
 
-// .729 = 41.8° =
-// 180° - 138.2°
-// where 138.2° is
-// the dihedral
-// angle in an
-// icosahedron
-bend .729 k.1 c e.0
-bend .729 i.0.0 g.1 h j.0
-bend .729 i.1 k.0 j.1 b c d b a h f a d f e.1 g.0
+// The dihedral angle in an
+// icosahedron is 138.2°.
+// Thus the bending angle is
+// 180°-138.2° = 41.8° = 0.729 rad
+// (Use a slightly smaller bending
+// angle such as 0.68 to see a
+// "sliced icosahedron".)
+bend .729 k.1 c
+bend .729 c e.0
+bend .729 b c
+bend .729 c d
+
+bend .729 g.1 i.0.0
+bend .729 g.1 h
+bend .729 h j.0
+bend .729 h a
+bend .729 f h
+
+bend .729 i.1 k.0
+bend .729 j.1 k.0
+bend .729 j.1 b
+bend .729 a b
+bend .729 e.1 g.0
+bend .729 e.1 f
+bend .729 d f
+
+bend .729 b d
+bend .729 f a
+bend .729 a d
 `,
-},
+  },
+  empty: {
+    info: `Define your own star and folding.`,
+    setup: "a",
+    transform: "",
+  },
 
 /*
 TODO:

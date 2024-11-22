@@ -29,7 +29,7 @@ type PhaseData = {
 const cmdNames = ["bend", "bend2", "reattach"];
 
 export function App() {
-  const [example, setExample] = useState<string>("thurston_fig_15");
+  const [example, setExample] = useState<string>("westendorp_icosahedron");
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
   const [showVertices, setShowVertices] = useState(true);
@@ -133,17 +133,18 @@ export function App() {
   return (
     <>
       <div style={{display: "flex"}}>
-        <div style={{width: "fit-content"}}>
-          <div class="controls">
-            Select example:
-            <br/>
+        <div style={{minWidth: "400px"}}>
+          <div class="with-margin">
+            Select example: {}
             <select onChange={e => {
               setExample(e.target["value"]);
               // Delaying run() so that it sees the updated example:
               setTimeout(run, 0);
             }}>
               {Object.entries(examples).map(([key, value]) => (
-                <option value={key}>{value.label ?? key}</option>
+                <option selected={example === key} value={key}>
+                  {value.label ?? key}
+                </option>
               ))}
             </select>
             <details>
@@ -151,17 +152,16 @@ export function App() {
               {examples[example].info.trim()}
             </details>
           </div>
-          <textarea ref={polygonDefElem}>
+          <textarea ref={polygonDefElem} rows={20} cols={10}>
             {examples[example].setup.trim()}
           </textarea>
-          <br/>
-          <textarea ref={actionsDefElem}>
+          <textarea ref={actionsDefElem} rows={20} cols={35}>
             {examples[example].transform.trim()}
           </textarea>
           <br/>
           <button onClick={run}>run</button>
           {phases.length > 0 && (
-            <div class="controls">
+            <div class="with-margin">
               {
                 phases.at(-1).error
                 ? <a href={`#phase-${phases.length}`}>Failure at step #{phases.length}</a>
@@ -229,7 +229,7 @@ export function App() {
         </div>
         <canvas ref={canvas}/>
       </div>
-      <div class="output" style={{width: "fit-content"}}>
+      <div class="with-margin" style={{width: "fit-content"}}>
         {phases.map(({error, logTitle, logText}, i) => (
           <div className="phase" style={`background: #${error ? "fee" : "efe"};`}>
             <details open={Boolean(error)} id={`phase-${i+1}`}>
@@ -858,7 +858,7 @@ class MyMesh extends Mesh {
     (acc, {from, to}) => XYZ.plus(acc, XYZ.wedgeProduct(this.pos(from), this.pos(to))),
     XYZ.zero(),
   );
-  }
+}
 
 /**
  * Return the vertices reachable from start without crossing the border.
@@ -882,4 +882,4 @@ const mergeNames = (a: string, b: string) =>
   a.slice(0, -2) === b.slice(0, -2) &&
   a !== b
   ? a.slice(0, -2)
-  : `[${a}|${b}]`
+  : `[${a}|${b}]`;
