@@ -809,7 +809,16 @@ class MyMesh extends Mesh {
       `The argument of "optimize" should be the number of optimization steps.`
     );
 
-    const {vertices, boundary, pos, setPos} = this;
+    const {vertices, loops, boundary, pos, setPos} = this;
+
+    for (const l of loops) {
+      if (l !== boundary && l.halfEdges().toArray().length !== 3) fail(
+        `cannot run "optimize" with non-triangle face: ${l} has ${
+          l.halfEdges().toArray().length
+        } edges.`
+      );
+    }
+
     const connections = new Map<Vertex, Map<Vertex, number>>();
     for (const va of vertices) {
       const vaConnections =
