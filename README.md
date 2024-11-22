@@ -126,7 +126,7 @@ In more detail:
   3. $dist(Q, Q') = dist(Q, R')$
   4. $dist(R, Q') = dist(R, R')$
 
-  By construction the conditions 2 and 3 can be expected to be equivalent.
+  By construction the conditions ii and iii can be expected to be equivalent.
   So we are left with three sphere equations.
 - The three spheres should intersect at one or two common points.
   (If they don't, the operation fails.)
