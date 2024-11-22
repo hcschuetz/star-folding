@@ -44,7 +44,7 @@ bend .5 e.1 f
 bend .5 g j.0.0
 bend .5 b.0 j.1.1
 
-optimize 200
+optimize 100
 `},
   icosahedron: {
     label: "Icosahedron",
