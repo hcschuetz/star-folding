@@ -134,6 +134,14 @@ export function App() {
     <>
       <div style={{display: "flex"}}>
         <div style={{minWidth: "400px"}}>
+          <div className="with-margin">
+            See the README file of
+            {} <a href="https://github.com/hcschuetz/star-folding/" target="_blank" rel="noopener noreferrer">
+              this project
+            </a>
+            <br/>
+            for usage instructions.
+          </div>
           <div class="with-margin">
             Select example: {}
             <select onChange={e => {
