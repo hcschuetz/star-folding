@@ -29,21 +29,24 @@ reattach i k
 reattach b c
 reattach e d
 reattach j.1 a
-bend2 + k a b.0
-bend2 + k c d
-bend2 + e.0 b j.1
-bend2 + k d f
-// bend2 + j.1 k h
-bend2 + f g h
-bend2 + e f k
-// bend2 + i.0 h f
 reattach k h
-// bend2 + j.0 h i.0
 reattach i.0 h
-bend2 + h k j.1
 reattach j.0 h
+
+bend .5 b.0 a i.1
+bend .5 k c d f g h i.0
+bend .5 f h d
+bend .5 b.1 e.0
+bend .5 h k d
+bend .5 c e.0
+bend .5 c a k
+bend .5 e.1 f
+bend .5 g j.0.0
+bend .5 b.0 j.1.1
+
+optimize 200
 `},
-  westendorp_icosahedron: {
+  icosahedron: {
     label: "Icosahedron",
     info: "From https://mathstodon.xyz/@GerardWestendorp/113374197385229562",
     setup: `
@@ -103,7 +106,7 @@ bend .729 b d
 bend .729 f a
 bend .729 a d
 `,
-  },
+},
   empty: {
     info: `Define your own star and folding.`,
     setup: "a",

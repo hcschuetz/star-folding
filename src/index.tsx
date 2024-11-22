@@ -26,10 +26,10 @@ type PhaseData = {
   triangles: V3[][],
 }
 
-const cmdNames = ["bend", "bend2", "reattach"];
+const cmdNames = ["bend", "bend2", "reattach", "optimize"];
 
 export function App() {
-  const [example, setExample] = useState<string>("westendorp_icosahedron");
+  const [example, setExample] = useState<string>("thurston_fig_15");
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
   const [showVertices, setShowVertices] = useState(true);
@@ -514,13 +514,17 @@ class MyMesh extends Mesh {
         const lengths = section.map(he => this.heLength(he));
         while (lengths.length > 0) {
           const i = lengths.findIndex((len, i) =>
-            i < lengths.length - 1 && Math.abs(len - lengths[i+1]) < 1e-8
+            i < lengths.length - 1 && Math.abs(len - lengths[i+1]) < 1e-3
           );
-          if (i === -1) fail(
-            `boundary section not foldable:${section.map(he =>
-              `\n  ${this.heLength(he).toFixed(5)}: ${he.from.name} -- ${he.to.name}`).join("")
-            }`
-          );
+          if (i === -1) {
+            // Do not fail here since "optimize" only approximates a solution:
+            log(
+              `WARNING: boundary section not foldable:${section.map(he =>
+                `\n  ${this.heLength(he).toFixed(5)}: ${he.from.name} -- ${he.to.name}`).join("")
+              }`
+            );
+            break;
+          }
           lengths.splice(i, 2);
         }
 
@@ -564,7 +568,7 @@ class MyMesh extends Mesh {
         // TODO compute a directed angle (as seen when looking along the half-edge)?
         const angle = XYZ.getAngle(this.faceOrientation(he), this.faceOrientation(he.twin));
         edgeMessages.push(
-          `${he.from.name}->${he.to.name}: ${(angle/TAU*360).toFixed(5)}° ${
+          `${he.from.name}->${he.to.name}: ${((.5-angle/TAU)*360).toFixed(5)}° ${
             he.from} ==[${he}(${he.loop})|${he.twin}(${he.twin.loop})]==> ${he.to}`
         );
       }
@@ -782,6 +786,78 @@ class MyMesh extends Mesh {
     );
     this.dropEdge(he_boundary_q);
     // TODO If more pairs of edges/vertices happen to align, merge them.
+  }
+
+  /**
+   * Move the vertices in an iterative process towards a configuration such that
+   * - all existing edges keep their lengths,
+   * - the star tips coincide,
+   * - and corresponding boundary vertices (duplicated by reattach operations)
+   *   coincide.
+   * 
+   * It does not keep faces flat.  Therefore the mesh should be fully
+   * triangulated before this method is called.
+   * 
+   * The only argument should be the number of iterations.
+   */
+  // The implementation is not only hacky but could probably be improved to
+  // converge faster.
+  optimize(args: string[]) {
+    if (args.length !== 1) fail(`"optimize" expects 1 argument`);
+    const nSteps = Number.parseInt(args[0]);
+    if (Number.isNaN(nSteps) || nSteps < 1) fail(
+      `The argument of "optimize" should be the number of optimization steps.`
+    );
+
+    const {vertices, boundary, pos, setPos} = this;
+    const connections = new Map<Vertex, Map<Vertex, number>>();
+    for (const va of vertices) {
+      const vaConnections =
+        new Map(va.neighbors().map(vb => [vb, this.distance(va, vb)]));
+
+      // It's a bit hacky to detect peer nodes by name
+      // (but it's easier than tracing reattachments).
+      const vaBase = va.name.replace(/\..*$/, "");
+      for (const vb of boundary.vertices()) {
+        if (vb === va) continue;
+        if (vb.name.replace(/\..*$/, "") === vaBase) {
+          assert(!vaConnections.has(vb));
+          vaConnections.set(vb, 0);
+        } else if (va.name.includes("^") && vb.name.includes("^")) {
+          assert(!vaConnections.has(vb));
+          vaConnections.set(vb, 0);
+        }
+      }
+      connections.set(va, vaConnections);
+    }
+
+    // TODO make #steps configurable
+    for (let i = 0; i < nSteps; i++) {
+      const targets = connections.entries().map(([va, vaConnections]) => [
+        va,
+        XYZ.scale(
+          1 / vaConnections.size,
+          vaConnections.entries().reduce(
+            (sum, [vb, len]) => XYZ.plus(sum, this.target(va, vb, len)),
+            XYZ.zero(),
+          ),
+        ),
+      ] as [Vertex, MV]).toArray();
+      const badness =
+        targets.reduce((sum, [v, target]) => sum + distance(pos(v), target), 0);
+      log(`badness[${i}] = ${badness}`);
+      for (const [v, pos] of targets) {
+        setPos(v, pos);
+      }
+    }
+  }
+
+  /** Where `vb` would like to place `va` so that the distance is `len` */
+  target(va: Vertex, vb: Vertex, len: number): MV {
+    const {pos} = this;
+    if (len === 0) return pos(vb); // just an optimization
+    const vec_ba = XYZ.minus(pos(va), pos(vb));
+    return XYZ.plus(pos(vb), XYZ.scale(len / (XYZ.norm(vec_ba) || 1), vec_ba));
   }
 
   rotatePoints(pivot: MV, from: MV, to: MV, vertices: Set<Vertex>) {
