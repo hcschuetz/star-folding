@@ -6,7 +6,7 @@ See <a href="https://johncarlosbaez.wordpress.com/2024/10/30/triangulations-of-t
 (and <a href="https://arxiv.org/pdf/math/9801088" target="_blank">here</a>)
 for a description of the task.
 
-The implementation can be found
+The application can be found
 <a href="https://hcschuetz.github.io/star-folding/dist/" target="_blank">here</a>.
 This README file explains how to use that page.
 
