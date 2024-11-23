@@ -47,7 +47,6 @@ bend .5 b.0 j.1.1
 optimize 100
 `},
   icosahedron: {
-    label: "Icosahedron",
     info: "From https://mathstodon.xyz/@GerardWestendorp/113374197385229562",
     setup: `
 a 9 8
@@ -107,6 +106,56 @@ bend .729 f a
 bend .729 a d
 `,
 },
+  icosahedron2: {
+    info: "Another icosahedron (experimental)",
+    setup: `
+a 12
+b 11
+c 10
+d 9
+e 8
+f 7
+g 6
+h 5
+i 4
+j 3
+k 2 1
+    `,
+    transform: `
+reattach a b
+reattach c d
+reattach e f
+reattach g h
+reattach i j
+reattach j k
+
+bend .5 a.1 c.0
+bend .5 b c.0
+bend .5 b d
+
+bend .5 c.1 e.0
+bend .5 d e.0
+bend .5 d f
+
+bend .5 e.1 g.0
+bend .5 f g.0
+bend .5 f h
+
+bend .5 g.1 i.0
+bend .5 h i.0
+bend .5 h j.0
+
+bend .5 i.1 a.0
+bend .5 j.1 a.0
+bend .5 j.1 b
+
+bend .5 k b
+bend .5 k d
+bend .5 k f
+bend .5 k h
+
+optimize 100    `
+  },
   empty: {
     info: `Define your own star and folding.`,
     setup: "a",

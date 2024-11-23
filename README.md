@@ -250,3 +250,18 @@ Unfortunately many error messages are not yet very helpful.
 (Better error reporting should be implemented.)
 But at least it is clarified which step was the first one
 to have a problem.
+
+
+### Peers
+
+For each edge of the initial star it is obvious to which other edge
+it will be aligned/merged in a properly folded polyhedron.
+We say that two such edges are each other's "peers".
+
+You can check one of the checkboxes to display the pairs of peers in the
+graphic output.
+
+The operations `bend2` and `reattach` make sure that they will only merge peers.
+Furthermore `reattach` declares the two new boundary edges created by
+cutting a face to be each other's peers
+so that they can be merged again in a later step.

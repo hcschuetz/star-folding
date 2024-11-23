@@ -24,6 +24,7 @@ type PhaseData = {
   vertexNames: string[],
   edges: [V3, V3][],
   triangles: V3[][],
+  peers: [V3, V3][],
 }
 
 const cmdNames = ["bend", "bend2", "reattach", "optimize"];
@@ -36,6 +37,7 @@ export function App() {
   const [showVertexNames, setShowVertexNames] = useState(true);
   const [showEdges, setShowEdges] = useState(true);
   const [showFaces, setShowFaces] = useState(true);
+  const [showPeers, setShowPeers] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
 
   const polygonDefElem = useRef<HTMLTextAreaElement>();
@@ -57,7 +59,7 @@ export function App() {
 
     function emitPhase(logTitle: string) {
       console.log("emitting phase:", logTitle);
-      const {vertices, loops, pos} = mesh;
+      const {vertices, loops, boundary, peers, pos, heCenter} = mesh;
       const vtxToV3 = (v: Vertex) => mvToV3(pos(v));
       phasesList.push({
         logTitle, logText, error,
@@ -71,6 +73,11 @@ export function App() {
           triangulate(l.vertices().map(v => pos(v)).toArray())
           .map(triangle => triangle.map(mvToV3))
         ).toArray(),
+        peers:
+          peers.entries().filter(([he0, he1]) => he0.id <= he1.id)
+          .map(([he0, he1]) =>
+            [mvToV3(heCenter(he0)), mvToV3(heCenter(he1))] as [V3, V3]
+          ).toArray(),
       });
     }
 
@@ -112,16 +119,16 @@ export function App() {
 
   useEffect(() => {
     if (canvas.current && phases.length > 0) {
-      const {vertices, vertexNames, edges, triangles} = phases[phaseNo];
+      const {vertices, vertexNames, edges, triangles, peers} = phases[phaseNo];
       return renderToCanvas(
         canvas.current,
-        vertices, vertexNames, edges, triangles,
-        showVertices, showVertexNames, showEdges, showFaces, showGrid,
+        vertices, vertexNames, edges, triangles, peers,
+        showVertices, showVertexNames, showEdges, showFaces, showPeers, showGrid,
       );
     }
   }, [
     canvas.current, phases, phaseNo,
-    showVertices, showVertexNames, showEdges, showFaces, showGrid,
+    showVertices, showVertexNames, showEdges, showFaces, showPeers, showGrid,
   ]);
 
   useEffect(run, []);
@@ -223,6 +230,14 @@ export function App() {
               <br/>
               <label>
                 <input type="checkbox"
+                  checked={showPeers}
+                  onChange={e => setShowPeers(e.target["checked"])}
+                /> {}
+                peers
+              </label>
+              <br/>
+              <label>
+                <input type="checkbox"
                   checked={showGrid}
                   onChange={e => setShowGrid(e.target["checked"])}
                 /> {}
@@ -253,10 +268,12 @@ function renderToCanvas(
   vertexNames: string[],
   edges: [V3, V3][],
   triangles: V3[][],
+  peers: [V3, V3][],
   showVertices: boolean,
   showVertexNames: boolean,
   showEdges: boolean,
   showFaces: boolean,
+  showPeers: boolean,
   showGrid: boolean,
 ) {
   const noBubble = (e: Event) => e.preventDefault();
@@ -269,16 +286,19 @@ function renderToCanvas(
   advancedTexture.rootContainer.scaleX = window.devicePixelRatio;
   advancedTexture.rootContainer.scaleY = window.devicePixelRatio;
   
-  const tipMaterial = new B.StandardMaterial("myMaterial", scene);
+  const tipMaterial = new B.StandardMaterial("tipMaterial", scene);
   tipMaterial.diffuseColor = B.Color3.Blue();
 
-  const innerMaterial = new B.StandardMaterial("myMaterial", scene);
+  const innerMaterial = new B.StandardMaterial("innerMaterial", scene);
   innerMaterial.diffuseColor = B.Color3.Red();
 
-  const lineMaterial = new B.StandardMaterial("myMaterial", scene);
-  lineMaterial.diffuseColor = B.Color3.Green();
+  const edgeMaterial = new B.StandardMaterial("edgeMaterial", scene);
+  edgeMaterial.diffuseColor = B.Color3.Green();
 
-  const faceMaterial = new B.StandardMaterial("myMaterial", scene);
+  const peerMaterial = new B.StandardMaterial("peerMaterial", scene);
+  peerMaterial.diffuseColor = B.Color3.Magenta();
+
+  const faceMaterial = new B.StandardMaterial("faceMaterial", scene);
   faceMaterial.diffuseColor = B.Color3.Yellow();
   faceMaterial.roughness = 100;
   faceMaterial.transparencyMode = B.Material.MATERIAL_ALPHABLEND;
@@ -287,7 +307,7 @@ function renderToCanvas(
   faceMaterial.sideOrientation = B.VertexData.DOUBLESIDE;
   faceMaterial.backFaceCulling = false;
 
-  const gridMaterial = new B.StandardMaterial("myMaterial", scene);
+  const gridMaterial = new B.StandardMaterial("gridMaterial", scene);
   gridMaterial.diffuseColor = B.Color3.Black();
 
   const center = vertices
@@ -322,7 +342,14 @@ function renderToCanvas(
   if (showEdges) {
     edges.forEach((path, i) => {
       const line = B.MeshBuilder.CreateTube("line" + i, {path, radius: .02});
-      line.material = lineMaterial;
+      line.material = edgeMaterial;
+      line.parent = root;
+    });
+  }
+  if (showPeers) {
+    peers.forEach((path, i) => {
+      const line = B.MeshBuilder.CreateTube("line" + i, {path, radius: .02});
+      line.material = peerMaterial;
       line.parent = root;
     });
   }
@@ -423,6 +450,9 @@ class MyMesh extends Mesh {
   setPos = (v: Vertex, pos: MV) => this.positions.set(v, pos);
   pos = (v: Vertex) => this.positions.get(v);
 
+  // TODO make this a WeakMap?
+  peers = new Map<HalfEdge, HalfEdge>();
+
   constructor(
     log: (...args: any[]) => unknown,
     fail: (msg: string) => never,
@@ -437,6 +467,7 @@ class MyMesh extends Mesh {
     outerHE.loop.name = "boundary";
     innerHE.to.name = "dummy";
     this.setPos(innerHE.to, XYZ.vec([0, 0, 0]))
+    this.peers.set(outerHE, outerHE);
     this.logMesh();
     this.checkWithData();
 
@@ -460,6 +491,8 @@ class MyMesh extends Mesh {
       const inward = innerHE1.from;
       inward.name = name;
       this.setPos(inward, innerPos);
+
+      this.peers.set(outerHE0, outerHE1).set(outerHE1, outerHE0);
     }
 
     if (XYZ.normSquared(currentPos) > 1e-12) fail(
@@ -468,6 +501,8 @@ class MyMesh extends Mesh {
 
     // remove dummy node
     this.contractEdge(outerHE);
+    this.peers.delete(outerHE);
+
 
     tips.forEach(tip => {
       let [he0, he1] = tip.halfEdgesOut();
@@ -499,47 +534,35 @@ class MyMesh extends Mesh {
     log("mesh checked");
   }
 
-  /**
-   * Check boundary "combinability".
-   * 
-   * Divide the boundary into sections separated by tip vertices.
-   * Each section should have an even number of edges and the section should be
-   * completely "foldable" by removing pairs of adjacent edges of equal length.
-   */
   checkPeers(): void {
-    const startHE = this.boundary.halfEdges().find(v => v.from.name.includes("^"));
-    if (!startHE) return; // apparently there aren't any tip vertices yet.
-    let count = 0, he = startHE, section: HalfEdge[] = [];
-    do {
-      section.push(he);
-      if (he.to.name.includes("^")) {
-        assert(section.length % 2 === 0);
+    const {loops, boundary, peers} = this;
 
-        const lengths = section.map(he => this.heLength(he));
-        while (lengths.length > 0) {
-          const i = lengths.findIndex((len, i) =>
-            i < lengths.length - 1 && Math.abs(len - lengths[i+1]) < 1e-3
-          );
-          if (i === -1) {
-            // Do not fail here since "optimize" only approximates a solution:
-            log(
-              `WARNING: boundary section not foldable:${section.map(he =>
-                `\n  ${this.heLength(he).toFixed(5)}: ${he.from.name} -- ${he.to.name}`).join("")
-              }`
-            );
-            break;
-          }
-          lengths.splice(i, 2);
-        }
+    for (const he of boundary.halfEdges()) {
+      assert(peers.has(he));
+    }
+    for (const [he0, he1] of peers) {
+      if (he0.loop !== boundary) fail(
+        `half-edge ${
+          he0} (${he0.from} - ${he0.to}) with peer ${
+          he0} (${he1.from} - ${he1.to}) found on non-boundary ${he0.loop}`
+      );
+      if (peers.get(he1) !== he0) fail(
+        `peers not reciprocal: ${
+          he0} (${he0.from} - ${he0.to}) and ${
+          he0} (${he1.from} - ${he1.to})`
+      );
+      // Relaxed check so that it works after approximative "optimize":
+      if (Math.abs(this.heLength(he0) - this.heLength(he1)) > 1e-3) log(
+        `WARNING: peer lengths do not fit: ${
+          he0}: ${he0.from} ==${this.heLength(he0)}==> ${he0.to} vs. ${
+          he1}: ${he1.from} ==${this.heLength(he1)}==> ${he1.to}`
+      );
 
-        section = [];
-      }
-      if (++count >= 50) fail(`edge-length loop ran away`);
-    } while ((he = he.next) !== startHE);
+    }
   }
 
   logMesh() {
-    const {vertices, loops} = this;
+    const {vertices, loops, peers} = this;
     for (const l of loops) {
       log(l, "=", ...[...l.halfEdges()].flatMap(he => [he, he.to]));
       log(`  = (${count(l.halfEdges())}):`, ...[...l.halfEdges()].map(he => he.to.name));
@@ -578,6 +601,13 @@ class MyMesh extends Mesh {
       }
     }
     log(edgeMessages.sort().join("\n"));
+    for (const [he0, he1] of peers) {
+      if (he0.id > he1.id) continue;
+      log(`peers: ${
+        he0} (${he0.from.name}->${he0.to.name}), ${
+        he1} (${he1.from.name}->${he1.to.name})`
+      );
+    }
   }
 
   bend(args: string[]) {
@@ -628,7 +658,7 @@ class MyMesh extends Mesh {
   }
 
   bend2(args: string[]) {
-    const {vertices, pos} = this;
+    const {vertices, peers, pos} = this;
 
     if (args.length !== 4) fail("bend2 expects 4 args");
     const choice = args.shift();
@@ -650,6 +680,12 @@ class MyMesh extends Mesh {
     const he_q_boundary =
       findUnique(q.halfEdgesOut(), he => he.loop === this.boundary);
     const he_boundary_q = he_q_boundary.prev;
+
+    if (peers.get(he_boundary_q) !== he_q_boundary) fail(
+      `cannot attach non-peers ${
+      he_boundary_q} (${he_boundary_q.from} - ${he_boundary_q.to}) and ${
+        he_boundary_q} (${he_q_boundary.from} - ${he_q_boundary.to})`
+    );
 
     const t1 = he_q_boundary.to;
     const t2 = he_boundary_q.from;
@@ -700,6 +736,8 @@ class MyMesh extends Mesh {
     const tmpEdge = this.splitLoop(he_q_boundary, he_boundary_q.prev, {create: "left"});
     this.contractEdge(tmpEdge[0]);
     this.dropEdge(he_q_boundary);
+    assert(peers.delete(he_boundary_q));
+    assert(peers.delete(he_q_boundary));
     t1.name = mergeNames(t2.name, t1.name);
 
     const he_tip1_q_aux = findHE(t1, q);
@@ -710,7 +748,7 @@ class MyMesh extends Mesh {
   }
 
   reattach(args: string[]) {
-    const {vertices, pos} = this;
+    const {vertices, peers, pos, setPos} = this;
 
     if (args.length !== 2) fail(`reattach expects 2 args`);
     const [pName, qName] = args;
@@ -722,7 +760,12 @@ class MyMesh extends Mesh {
     const he_boundary_p = findUnique([...p.halfEdgesIn()], he => he.loop === this.boundary);
     const he_boundary_q = findUnique([...q.halfEdgesIn()], he => he.loop === this.boundary);
     const he_q_boundary = he_boundary_q.next;
-    assert(Math.abs(this.heLength(he_boundary_q) - this.heLength(he_q_boundary)) < 1e-8);
+    if (
+      peers.get(he_boundary_q) !== he_q_boundary ||
+      peers.get(he_q_boundary) !== he_boundary_q
+    ) fail(`cannot reattach at non-peers ${
+      he_boundary_q} (${he_boundary_q.from} - ${he_boundary_q.to}) and ${
+      he_q_boundary} (${he_q_boundary.from} - ${he_q_boundary.to})`);
     const t1 = he_boundary_q.from;
     const t2 = he_q_boundary.to;
 
@@ -730,10 +773,11 @@ class MyMesh extends Mesh {
     const [he_qp_B, he_pq_B] = this.splitLoop(he_pq_A, he_face_p, {create: "left"});
     log("AB", he_qp_A.loop.name, he_qp_B.loop.name);
     const [he_p0_p1, he_p1_p0] = this.splitVertex(he_qp_B, he_boundary_p, {create: "both"});
-    this.setPos(he_p0_p1.from, pos(p));
-    this.setPos(he_p0_p1.to, pos(p));
+    setPos(he_p0_p1.from, pos(p));
+    setPos(he_p0_p1.to, pos(p));
     vertices.delete(p);
     this.dropEdge(he_p0_p1);
+    peers.set(he_pq_A, he_qp_B).set(he_qp_B, he_pq_A);
 
     // Now we have cut through p and face.  The two pieces should be connected
     // only at q.
@@ -789,6 +833,8 @@ class MyMesh extends Mesh {
       `faces not coplanar: ${he_boundary_q.loop} and ${he_boundary_q.twin}`
     );
     this.dropEdge(he_boundary_q);
+    assert(this.peers.delete(he_boundary_q));
+    assert(this.peers.delete(he_q_boundary));
     // TODO If more pairs of edges/vertices happen to align, merge them.
   }
 
@@ -919,6 +965,9 @@ class MyMesh extends Mesh {
   distance = (from: Vertex, to: Vertex) => distance(this.pos(from), this.pos(to));
 
   heLength = (he: HalfEdge) => this.distance(he.from, he.to);
+
+  heCenter = (he: HalfEdge) =>
+    XYZ.scale(.5, XYZ.plus(this.pos(he.from), this.pos(he.to)));
 
   isLoopFlat(loop: Loop) {
     // This is a bit too optimistic:  A non-flat loop with total area 0 will be
