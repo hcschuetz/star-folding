@@ -144,11 +144,7 @@ export function App() {
           </div>
           <div class="with-margin">
             Select example: {}
-            <select onChange={e => {
-              setExample(e.target["value"]);
-              // Delaying run() so that it sees the updated example:
-              setTimeout(run, 0);
-            }}>
+            <select onChange={e => setExample(e.target["value"])}>
               {Object.entries(examples).map(([key, value]) => (
                 <option selected={example === key} value={key}>
                   {value.label ?? key}
