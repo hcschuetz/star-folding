@@ -27,8 +27,7 @@ The first input box on the page allows to define the star shape.
 Actually it defines the polyhedron around the star tips.
 The inner vertices of the star are computed automatically.
 (The term "inner vertex" refers to an inward-pointing vertex on the
-star boundary, not a vertex somewhere inside the manifold.
-Vertices inside the manifold will actually not be used.)
+star boundary, not a vertex somewhere inside the manifold.)
 
 The syntax is like this:
 Each line (which is neither empty nor starting with `//`)
