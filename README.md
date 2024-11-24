@@ -183,6 +183,10 @@ In more detail:
     are in a common plane.
 - The two faces are merged into a single one.
 
+When `reattach` splits a vertex, the new vertices inherit the original vertex'
+name but with suffix `.0` or `.1` appended.
+Take this into account when referencing these vertices in later operations.
+
 
 ### `contract`
 
