@@ -911,6 +911,8 @@ class MyMesh extends Mesh {
       for (const [v, pos] of targets) {
         setPos(v, pos);
       }
+      // TODO be less strict?
+      if (badness === 0) break;
     }
   }
 
