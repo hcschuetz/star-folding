@@ -287,16 +287,19 @@ function renderToCanvas(
   advancedTexture.rootContainer.scaleY = window.devicePixelRatio;
   
   const tipMaterial = new B.StandardMaterial("tipMaterial", scene);
-  tipMaterial.diffuseColor = B.Color3.Blue();
+  tipMaterial.diffuseColor = B.Color3.Red();
 
   const innerMaterial = new B.StandardMaterial("innerMaterial", scene);
-  innerMaterial.diffuseColor = B.Color3.Red();
+  innerMaterial.diffuseColor = B.Color3.Blue();
 
   const edgeMaterial = new B.StandardMaterial("edgeMaterial", scene);
   edgeMaterial.diffuseColor = B.Color3.Green();
 
   const peerMaterial = new B.StandardMaterial("peerMaterial", scene);
-  peerMaterial.diffuseColor = B.Color3.Magenta();
+  peerMaterial.diffuseColor = B.Color3.Red();
+  peerMaterial.roughness = 100;
+  peerMaterial.transparencyMode = B.Material.MATERIAL_ALPHABLEND;
+  peerMaterial.alpha = 0.5;
 
   const faceMaterial = new B.StandardMaterial("faceMaterial", scene);
   faceMaterial.diffuseColor = B.Color3.Yellow();
