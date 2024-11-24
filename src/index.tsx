@@ -538,7 +538,12 @@ class MyMesh extends Mesh {
   }
 
   checkPeers(): void {
-    const {loops, boundary, peers} = this;
+    const {boundary, peers} = this;
+
+    if (!boundary) { // The manifold is completely folded to a polyhedron
+      assert(peers.size === 0);
+      return;
+    }
 
     for (const he of boundary.halfEdges()) {
       assert(peers.has(he));
@@ -893,6 +898,12 @@ class MyMesh extends Mesh {
       connections.set(va, vaConnections);
     }
 
+    // TODO: distances = new Map<HalfEdge, number>();
+    // - Then fill it for all half edges.
+    // - Then glue peers;  this should keep the distance information alive
+    //   (also for the last pair of peers?)
+    // - Then contract the glued polyhedron.  (No "gluing constraints needed")
+
     for (let i = 0; i < nSteps; i++) {
       const targets = connections.entries().map(([va, vaConnections]) => [
         va,
@@ -913,6 +924,8 @@ class MyMesh extends Mesh {
       // TODO be less strict?
       if (badness === 0) break;
     }
+
+    this.gluePeers();
   }
 
   /** Where `vb` would like to place `va` so that the distance is `len` */
@@ -921,6 +934,32 @@ class MyMesh extends Mesh {
     if (len === 0) return pos(vb); // just an optimization
     const vec_ba = XYZ.minus(pos(va), pos(vb));
     return XYZ.plus(pos(vb), XYZ.scale(len / (XYZ.norm(vec_ba) || 1), vec_ba));
+  }
+
+  gluePeers() {
+    const {boundary, peers} = this;
+    while (peers.size > 2) {
+      log(`peers left: ${peers.size}`);
+      const [he0, he1] = peers.entries().find(([he0, he1]) => he0.to === he1.from);
+      log(`gluing ${he0}, ${he1} at ${he0.to}`);
+      const [he2, he3] = this.splitLoop(he0.prev, he1, {create: "right"});
+      this.contractEdge(he2);
+      he2.from.name = mergeNames(he2.to.name, he2.from.name);
+      this.dropEdge(he0);
+      assert(peers.delete(he0));
+      assert(peers.delete(he1));
+    }
+    {
+      log("gluing last peers", ...boundary.halfEdges());
+      let he0 = boundary.firstHalfEdge;
+      let he1 = he0.next;
+      assert(peers.get(he0) === he1);
+      assert(peers.get(he1) === he0);
+      this.dropEdge(he0);
+      assert(peers.delete(he0));
+      assert(peers.delete(he1));
+      this.boundary = undefined;
+    }
   }
 
   rotatePoints(pivot: MV, from: MV, to: MV, vertices: Set<Vertex>) {
