@@ -43,7 +43,8 @@ bend .5 g j.0.0
 bend .5 b.0 j.1.1
 
 contract 100
-`},
+`,
+  },
   icosahedron: {
     info: "From https://mathstodon.xyz/@GerardWestendorp/113374197385229562",
     setup: `
@@ -103,7 +104,7 @@ bend .729 b d
 bend .729 f a
 bend .729 a d
 `,
-},
+  },
   icosahedron2: {
     info: "Another icosahedron (experimental)",
     setup: `
@@ -152,7 +153,8 @@ bend .5 k d
 bend .5 k f
 bend .5 k h
 
-contract 100    `
+contract 100
+`,
   },
   empty: {
     info: `Define your own star and folding.`,
