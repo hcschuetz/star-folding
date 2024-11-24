@@ -893,7 +893,6 @@ class MyMesh extends Mesh {
       connections.set(va, vaConnections);
     }
 
-    // TODO make #steps configurable
     for (let i = 0; i < nSteps; i++) {
       const targets = connections.entries().map(([va, vaConnections]) => [
         va,
