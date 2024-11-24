@@ -29,10 +29,18 @@ reattach i k
 reattach e d
 reattach b c
 
+bend2 + f g h
+// This is to demonstrate the
+// usage of "bend2". Alternatively
+// we could have written
+// "bend .5 f g h" and let the
+// "contract" operation take care
+// of the precise angle.
+
 bend .5 e.1 f d c k a c e.0 b.1
-bend .5 i.0 h f g h d k
+bend .5 i.0 h f
 bend .5 i.1 a b.0
-bend .5 j.0 h k
+bend .5 j.0 h k d h
 bend .5 a j.1
 
 contract 100
