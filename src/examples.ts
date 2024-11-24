@@ -26,11 +26,9 @@ k 1 12 12
     transform: `
 reattach j i
 reattach i k
+reattach j.1 a
 reattach b c
 reattach e d
-reattach j.1 a
-reattach k h
-reattach i.0 h
 reattach j.0 h
 
 bend .5 b.0 a i.1
