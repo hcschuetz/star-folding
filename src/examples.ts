@@ -6,7 +6,7 @@ export type Example = {
 };
 
 const examples: Record<string, Example> = {
-  thurston_fig_15: {
+  thurston: {
     label: "Thurston",
     info: `From https://arxiv.org/pdf/math/9801088, Figure 15;
 see also https://mathstodon.xyz/@johncarlosbaez/113369111554515465`,
@@ -26,21 +26,14 @@ k 1 12 12
     transform: `
 reattach j i
 reattach i k
-reattach j.1 a
-reattach b c
 reattach e d
-reattach j.0 h
+reattach b c
 
-bend .5 b.0 a i.1
-bend .5 k c d f g h i.0
-bend .5 f h d
-bend .5 b.1 e.0
-bend .5 h k d
-bend .5 c e.0
-bend .5 c a k
-bend .5 e.1 f
-bend .5 g j.0.0
-bend .5 b.0 j.1.1
+bend .5 e.1 f d c k a c e.0 b.1
+bend .5 i.0 h f g h d k
+bend .5 i.1 a b.0
+bend .5 j.0 h k
+bend .5 a j.1
 
 contract 100
 `,

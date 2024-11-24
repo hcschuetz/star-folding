@@ -30,7 +30,7 @@ type PhaseData = {
 const cmdNames = ["bend", "bend2", "reattach", "contract"];
 
 export function App() {
-  const [example, setExample] = useState<string>("thurston_fig_15");
+  const [example, setExample] = useState<string>("thurston");
   const [phases, setPhases] = useState<PhaseData[]>([]);
   const [phaseNo, setPhaseNo] = useState(0);
   const [showVertices, setShowVertices] = useState(true);
