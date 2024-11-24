@@ -42,7 +42,7 @@ bend .5 e.1 f
 bend .5 g j.0.0
 bend .5 b.0 j.1.1
 
-optimize 100
+contract 100
 `},
   icosahedron: {
     info: "From https://mathstodon.xyz/@GerardWestendorp/113374197385229562",
@@ -152,7 +152,7 @@ bend .5 k d
 bend .5 k f
 bend .5 k h
 
-optimize 100    `
+contract 100    `
   },
   empty: {
     info: `Define your own star and folding.`,

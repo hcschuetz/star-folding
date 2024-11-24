@@ -27,7 +27,7 @@ type PhaseData = {
   peers: [V3, V3][],
 }
 
-const cmdNames = ["bend", "bend2", "reattach", "optimize"];
+const cmdNames = ["bend", "bend2", "reattach", "contract"];
 
 export function App() {
   const [example, setExample] = useState<string>("thurston_fig_15");
@@ -554,7 +554,7 @@ class MyMesh extends Mesh {
           he0} (${he0.from} - ${he0.to}) and ${
           he0} (${he1.from} - ${he1.to})`
       );
-      // Relaxed check so that it works after approximative "optimize":
+      // Relaxed check so that it works after approximative "contract":
       if (Math.abs(this.heLength(he0) - this.heLength(he1)) > 1e-3) log(
         `WARNING: peer lengths do not fit: ${
           he0}: ${he0.from} ==${this.heLength(he0)}==> ${he0.to} vs. ${
@@ -855,18 +855,18 @@ class MyMesh extends Mesh {
    */
   // The implementation is not only hacky but could probably be improved to
   // converge faster.
-  optimize(args: string[]) {
-    if (args.length !== 1) fail(`"optimize" expects 1 argument`);
+  contract(args: string[]) {
+    if (args.length !== 1) fail(`"contract" expects 1 argument`);
     const nSteps = Number.parseInt(args[0]);
     if (Number.isNaN(nSteps) || nSteps < 1) fail(
-      `The argument of "optimize" should be the number of optimization steps.`
+      `The argument of "contract" should be the number of optimization steps.`
     );
 
     const {vertices, loops, boundary, pos, setPos} = this;
 
     for (const l of loops) {
       if (l !== boundary && l.halfEdges().toArray().length !== 3) fail(
-        `cannot run "optimize" with non-triangle face: ${l} has ${
+        `cannot run "contract" with non-triangle face: ${l} has ${
           l.halfEdges().toArray().length
         } edges.`
       );

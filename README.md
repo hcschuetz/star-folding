@@ -184,7 +184,7 @@ In more detail:
 - The two faces are merged into a single one.
 
 
-### `optimize`
+### `contract`
 
 `bend2` is a constraint-solving operation finding two bending angles
 simultaneously such that two edges will align.
@@ -192,7 +192,7 @@ But we need solvers for more complex constraints.
 It might even be impossible to solve the entire constraint problem as a
 sequence of "local" constraint-solving steps.
 
-The `optimize` operation approximates a solution of the global
+The `contract` operation approximates a solution of the global
 constraint problem iteratively.
 The constraints are:
 - Edges should keep their lengths.
@@ -203,15 +203,15 @@ The constraints are:
 - Vertices that have been replicated by `reattach` operations
   should coincide.
 
-Actually the current implementation of `optimize` does not take care
+Actually the current implementation of `contract` does not take care
 of faces and angles.  To avoid this problem, the manifold should be fully
-triangulated (using `bend` and `bend2`) before calling `optimize`.
+triangulated (using `bend` and `bend2`) before calling `contract`.
 
 The current implementation is very simplistic but apparently sufficient.
 (The iterative approximation could probably be made to converge much
 faster.)
 
-`optimize` takes one argument, namely the number of iterations.
+`contract` takes one argument, namely the number of iterations.
 
 
 Output
