@@ -305,7 +305,7 @@ function renderToCanvas(
   faceMaterial.diffuseColor = B.Color3.Yellow();
   faceMaterial.roughness = 100;
   faceMaterial.transparencyMode = B.Material.MATERIAL_ALPHABLEND;
-  faceMaterial.alpha = 0.3;
+  faceMaterial.alpha = 0.6;
   // faceMaterial.wireframe = true;
   faceMaterial.sideOrientation = B.VertexData.DOUBLESIDE;
   faceMaterial.backFaceCulling = false;
@@ -322,7 +322,7 @@ function renderToCanvas(
 
   if (showVertices) {
     vertices.forEach((pos, i) => {
-      const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .05});
+      const ball = B.MeshBuilder.CreateIcoSphere("vtx" + i, {radius: .03});
       ball.position = pos;
       ball.parent = root;
       ball.material = vertexNames[i].includes("^") ? tipMaterial : innerMaterial;
@@ -344,14 +344,14 @@ function renderToCanvas(
   }
   if (showEdges) {
     edges.forEach((path, i) => {
-      const line = B.MeshBuilder.CreateTube("line" + i, {path, radius: .02});
+      const line = B.MeshBuilder.CreateTube("line" + i, {path, radius: .01});
       line.material = edgeMaterial;
       line.parent = root;
     });
   }
   if (showPeers) {
     peers.forEach((path, i) => {
-      const line = B.MeshBuilder.CreateTube("line" + i, {path, radius: .02});
+      const line = B.MeshBuilder.CreateTube("line" + i, {path, radius: .01});
       line.material = peerMaterial;
       line.parent = root;
     });
