@@ -208,12 +208,14 @@ The constraints are:
   should coincide.
 
 Actually the current implementation of `contract` does not take care
-of faces and angles.  To avoid this problem, the manifold should be fully
+of faces and angles.  To avoid this problem, the manifold must be fully
 triangulated (using `bend` and `bend2`) before calling `contract`.
 
-The current implementation is very simplistic but apparently sufficient.
-(The iterative approximation could probably be made to converge much
-faster.)
+The current implementation is quite simplistic but apparently sufficient.
+
+After the geometric contraction (moving corresponding vertices together)
+also a topological contraction (merging of corresponding vertices and edges)
+is applied. 
 
 `contract` takes one argument, namely the number of iterations.
 

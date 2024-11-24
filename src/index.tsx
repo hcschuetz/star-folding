@@ -853,13 +853,14 @@ class MyMesh extends Mesh {
    * - and corresponding boundary vertices (duplicated by reattach operations)
    *   coincide.
    * 
-   * It does not keep faces flat.  Therefore the mesh should be fully
-   * triangulated before this method is called.
+   * The iteration steps do not keep faces flat.  Therefore the mesh must be
+   * fully triangulated before this method is called.
+   * 
+   * After the vertices have been moved, corresponding vertices and
+   * boundary edges are also merged topologically.
    * 
    * The only argument should be the number of iterations.
    */
-  // The implementation is not only hacky but could probably be improved to
-  // converge faster.
   contract(args: string[]) {
     if (args.length !== 1) fail(`"contract" expects 1 argument`);
     const nSteps = Number.parseInt(args[0]);
@@ -898,12 +899,6 @@ class MyMesh extends Mesh {
       connections.set(va, vaConnections);
     }
 
-    // TODO: distances = new Map<HalfEdge, number>();
-    // - Then fill it for all half edges.
-    // - Then glue peers;  this should keep the distance information alive
-    //   (also for the last pair of peers?)
-    // - Then contract the glued polyhedron.  (No "gluing constraints needed")
-
     for (let i = 0; i < nSteps; i++) {
       const targets = connections.entries().map(([va, vaConnections]) => [
         va,
@@ -924,6 +919,9 @@ class MyMesh extends Mesh {
       // TODO be less strict?
       if (badness === 0) break;
     }
+
+    // Note: I tried gluing before contracting in the hope that it improves
+    // convergence, but it didn't.
 
     this.gluePeers();
   }
