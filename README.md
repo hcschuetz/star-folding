@@ -30,7 +30,7 @@ The inner vertices of the star are computed automatically.
 star boundary, not a vertex somewhere inside the manifold.)
 
 *Hint: To see the star before it is folded,
-select "1. initialize" in the step menu below the input boxes.*
+select "1. setup" in the step menu below the input boxes.*
 
 The syntax is like this:
 Each line (which is neither empty nor starting with `//`)

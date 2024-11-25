@@ -92,7 +92,7 @@ export function App() {
         break createPhases;
       }
       finally {
-        emitPhase("initialize")
+        emitPhase("setup")
       }
 
       for (const line of getLines(actionsDef)) {
