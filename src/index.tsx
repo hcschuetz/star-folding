@@ -510,7 +510,7 @@ class MyMesh extends Mesh {
     tips.forEach(tip => {
       let [he0, he1] = tip.halfEdgesOut();
       if (he0.loop === innerHE.loop) [he0, he1] = [he1, he0];
-      tip.name = `[${he0.to.name}^${he1.to.name}]`;
+      tip.name = `${he0.to.name}^${he1.to.name}`;
     });
   }
 
@@ -1055,10 +1055,28 @@ function collectVertices(start: Vertex, border: Set<Vertex>): Set<Vertex> {
   return collected;
 }
 
-const mergeNames = (a: string, b: string) =>
-  (a.endsWith(".0") || a.endsWith(".1")) &&
-  (b.endsWith(".0") || b.endsWith(".1")) &&
-  a.slice(0, -2) === b.slice(0, -2) &&
-  a !== b
-  ? a.slice(0, -2)
-  : `[${a}|${b}]`;
+const mergeNames = (a: string, b: string) => {
+  if (
+    (a.endsWith(".0") || a.endsWith(".1")) &&
+    (b.endsWith(".0") || b.endsWith(".1")) &&
+    a.slice(0, -2) === b.slice(0, -2) &&
+    a !== b
+  ) {
+    return a.slice(0, -2);
+  }
+
+  {
+    const i = b.indexOf("^");
+    if (i !== -1 && a.endsWith("^" + b.slice(0, i))) {
+      return a + b.slice(i);
+    }
+  }
+  {
+    const i = a.indexOf("^");
+    if (i !== -1 && b.endsWith("^" + a.slice(0, i))) {
+      return b + a.slice(i);
+    }
+  }
+
+  return `${a}+${b}`;
+}
