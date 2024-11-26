@@ -6,7 +6,7 @@ import * as G from "@babylonjs/gui";
 
 import './style.css';
 import { assert, choose, count, fail, findUnique, getLines, log, setLogger } from './utils';
-import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU } from './geom-utils';
+import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU, interpolate } from './geom-utils';
 import { findHE, HalfEdge, Loop, Mesh, Vertex } from './mesh';
 import examples from './examples';
 import triangulate from './triangulate';
@@ -59,7 +59,7 @@ export function App() {
 
     function emitPhase(logTitle: string) {
       console.log("emitting phase:", logTitle);
-      const {vertices, loops, boundary, peers, pos, heCenter} = mesh;
+      const {vertices, loops, peers, pos, hePoint} = mesh;
       const vtxToV3 = (v: Vertex) => mvToV3(pos(v));
       phasesList.push({
         logTitle, logText, error,
@@ -76,7 +76,7 @@ export function App() {
         peers:
           peers.entries().filter(([he0, he1]) => he0.id <= he1.id)
           .map(([he0, he1]) =>
-            [mvToV3(heCenter(he0)), mvToV3(heCenter(he1))] as [V3, V3]
+            [mvToV3(hePoint(he0, .5)), mvToV3(hePoint(he1, .5))] as [V3, V3]
           ).toArray(),
       });
     }
@@ -1008,8 +1008,8 @@ class MyMesh extends Mesh {
 
   heLength = (he: HalfEdge) => this.distance(he.from, he.to);
 
-  heCenter = (he: HalfEdge) =>
-    XYZ.scale(.5, XYZ.plus(this.pos(he.from), this.pos(he.to)));
+  hePoint = (he: HalfEdge, lambda: number) =>
+    interpolate(this.pos(he.from), this.pos(he.to), lambda);
 
   isLoopFlat(loop: Loop) {
     // This is a bit too optimistic:  A non-flat loop with total area 0 will be

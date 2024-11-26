@@ -1,7 +1,5 @@
-import { Algebra, Multivector } from "./geometric-algebra/Algebra";
-import { makeLetterNames } from "./geometric-algebra/componentNaming";
+import { Multivector } from "./geometric-algebra/Algebra";
 import { B, baseToRepr, makeSphere, R, reprToBase, splitPointPair } from "./geometric-algebra/conformal";
-import NumericBackEnd from "./geometric-algebra/NumericBackEnd";
 import { assert, log } from "./utils";
 
 export { B as XYZ };
@@ -95,3 +93,114 @@ export function rotatePoints(
     pt.pos = newPos;
   }
 }
+
+
+export const interpolate = (a: MV, b: MV, lambda: number) =>
+  B.plus(B.scale(1-lambda, a), B.scale(lambda, b));
+
+// For 1-vectors.
+export const dot = (a: MV, b: MV) => B.contractLeft(a, b).value(0);
+
+/**
+ * Compute the interpolation parameters for the point on line `[p0 p1]`
+ * that is closest to line `[q0 q1]`.
+ * 
+ * The returned value is `[num_p, num_q, denom]` and the interpolation params
+ * are `num_p / denom` and `num_q / denom`, respectively.
+ * 
+ * Not yet performing the division gives application code the chance to
+ * detect and handle (close-to-)zero denominator and/or numerators.
+ */
+export function closestLinePoints(
+  p0: MV, p1: MV, q0: MV, q1: MV
+): [number, number, number] {
+  /*
+  d0 := q0 - p0
+  dp := p1 - p0
+  dq := q1 - q0
+
+  // The points of lines [p0 p1] and [q0 q1] closest to each other
+  // in parametric form:
+  p := (1-lambda_p)*p0 + lambda_p*p1
+     = p0 + lambda_p*(p1 - p0)
+     = p0 + lambda_p*dp
+  q := (1-lambda_q)*q0 + lambda_q*q1
+     = q0 + lambda_q*(q1 - q0)
+     = q0 + lambda_q*dq
+
+  // Vector between p and q:
+  dpq := p - q
+       = (p0 + lambda_p*dp) - (q0 + lambda_q*dq)
+       = -(q0 - p0) + lambda_p*dp - lambda_q*dq
+       = -d0 + lambda_p*dp - lambda_q*dq
+
+  // dpq must be orthogonal to dq:
+  dpq . dq = 0
+  // substitute dpq
+  (-d0 + lambda_p*dp - lambda_q*dq) . dq = 0
+  // distribute ". dq"
+  -d0.dq + lambda_p*dp.dq - lambda_q*dq.dq = 0
+  // + d0.dq
+  lambda_p*dp.dq - lambda_q*dq.dq = d0.dq                             (1)
+
+  // dpq must be orthogonal to dp:
+  dpq . dp = 0
+  (-d0 + lambda_p*dp - lambda_q*dq) . dp = 0
+  -d0.dp + lambda_p*dp.dp - lambda_q*dp.dq = 0
+  lambda_p*dp.dp - lambda_q*dp.dq = d0.dp                             (2)
+
+  // (1)*dp.dq - (2)*dq.dq:
+  lambda_p*(dp.dq*dp.dq - dp.dp*dq.dq) = d0.dq*dp.dq - d0.dp*dq.dq
+  lambda_p = (d0.dq*dp.dq - d0.dp*dq.dq) / (dp.dq*dp.dq - dp.dp*dq.dq)
+
+  // (1)*dp.dp - (2)*dp.dq:
+  lambda_q*(dp.dq*dp.dq - dq.dq*dp.dp) = d0.dq*dp.dp - d0.dp*dp.dq
+  lambda_q = (d0.dq*dp.dp - d0.dp*dp.dq) / (dp.dq*dp.dq - dp.dp*dq.dq)
+
+  // Notice that the denominator in the formulas for lambda_p and lambda_q
+  // are the same.  When is it 0?
+  dp.dq*dp.dq = dp.dp*dq.dq
+  // lines are parallel (or one line has length 0): dq = he*alpha
+  */
+  const d0 = B.minus(q0, p0);
+  const dp = B.minus(p1, p0);
+  const dq = B.minus(q1, q0);
+  const d0_dq = dot(d0, dq);
+  const d0_dp = dot(d0, dp);
+  const dp_dp = dot(dp, dp);
+  const dp_dq = dot(dp, dq);
+  const dq_dq = dot(dq, dq);
+  const numerator_p = d0_dq * dp_dq - d0_dp * dq_dq;
+  const numerator_q = d0_dq * dp_dp - d0_dp * dp_dq;
+  const denominator = dp_dq * dp_dq - dp_dp * dq_dq;
+
+  return [numerator_p, numerator_q, denominator];
+}
+
+/*
+// In 2D closestLinePoints(...) becomes a line intersection,
+// but there is an even simpler solution for this case:
+
+// Define d0, dp, dq, p, q as above
+
+// Intersection:
+p = q
+p0 + lambda_p*dp = q0 + lambda_q*dq
+lambda_p*dp - lambda_q*dq = q0 - p0 = d0
+
+// ^dp:
+lambda_p*dp^dp - lambda_q*dq^dp = d0^dp
+lambda_q = d0^dp / dp^dq
+
+// ^dq:
+lambda_p*dp^dq - lambda_q*dq^dq = d0^dq
+lambda_p = d0^dq / dp^dq
+
+// Both numerators and the common denominator are bivectors and thus
+// scalar multiples of the 2D pseudoscalar, which cancels out in the division.
+//
+// Here it's even more obvious that the denominator is 0 if dp and dq
+// are parallel (or one of them is degenerated to 0).
+// If the d0 is also parallel to dp and dq (that is, the two lines coincide),
+// then the numerators also become 0.
+*/
