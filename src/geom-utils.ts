@@ -98,9 +98,6 @@ export function rotatePoints(
 export const interpolate = (a: MV, b: MV, lambda: number) =>
   B.plus(B.scale(1-lambda, a), B.scale(lambda, b));
 
-// For 1-vectors.
-export const dot = (a: MV, b: MV) => B.contractLeft(a, b).value(0);
-
 /**
  * Compute the interpolation parameters for the point on line `[p0 p1]`
  * that is closest to line `[q0 q1]`.
@@ -165,11 +162,11 @@ export function closestLinePoints(
   const d0 = B.minus(q0, p0);
   const dp = B.minus(p1, p0);
   const dq = B.minus(q1, q0);
-  const d0_dq = dot(d0, dq);
-  const d0_dp = dot(d0, dp);
-  const dp_dp = dot(dp, dp);
-  const dp_dq = dot(dp, dq);
-  const dq_dq = dot(dq, dq);
+  const d0_dq = B.scalarProduct(d0, dq);
+  const d0_dp = B.scalarProduct(d0, dp);
+  const dp_dp = B.scalarProduct(dp, dp);
+  const dp_dq = B.scalarProduct(dp, dq);
+  const dq_dq = B.scalarProduct(dq, dq);
   const numerator_p = d0_dq * dp_dq - d0_dp * dq_dq;
   const numerator_q = d0_dq * dp_dp - d0_dp * dp_dq;
   const denominator = dp_dq * dp_dq - dp_dp * dq_dq;
