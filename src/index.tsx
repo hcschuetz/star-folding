@@ -466,7 +466,8 @@ class MyMesh extends Mesh {
   setup(def: string) {
     const [innerHE, outerHE] = this.addCore();
     this.boundary = outerHE.loop
-    innerHE.loop.name = "star";
+    const star = innerHE.loop;
+    star.name = "star";
     outerHE.loop.name = "boundary";
     innerHE.to.name = "dummy";
     this.setPos(innerHE.to, XYZ.vec([0, 0, 0]))
@@ -509,7 +510,7 @@ class MyMesh extends Mesh {
 
     tips.forEach(tip => {
       let [he0, he1] = tip.halfEdgesOut();
-      if (he0.loop === innerHE.loop) [he0, he1] = [he1, he0];
+      if (he0.loop === star) [he0, he1] = [he1, he0];
       tip.name = `${he0.to.name}^${he1.to.name}`;
     });
   }
