@@ -119,10 +119,8 @@ export function App() {
 
   useEffect(() => {
     if (canvas.current && phases.length > 0) {
-      const {vertices, vertexNames, edges, triangles, peers} = phases[phaseNo];
       return renderToCanvas(
-        canvas.current,
-        vertices, vertexNames, edges, triangles, peers,
+        canvas.current, phases[phaseNo],
         showVertices, showVertexNames, showEdges, showFaces, showPeers, showGrid,
       );
     }
@@ -264,11 +262,7 @@ export function App() {
 
 function renderToCanvas(
   canvas: HTMLCanvasElement,
-  vertices: V3[],
-  vertexNames: string[],
-  edges: [V3, V3][],
-  triangles: V3[][],
-  peers: [V3, V3][],
+  phaseData: PhaseData,
   showVertices: boolean,
   showVertexNames: boolean,
   showEdges: boolean,
@@ -276,6 +270,10 @@ function renderToCanvas(
   showPeers: boolean,
   showGrid: boolean,
 ) {
+  const {
+    vertices, vertexNames, edges, triangles, peers,
+  } = phaseData;
+
   const noBubble = (e: Event) => e.preventDefault();
   canvas.addEventListener("wheel", noBubble);
 
