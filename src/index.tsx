@@ -365,7 +365,6 @@ function renderToCanvas(
       mesh.parent = root;
     });
   }
-
   if (showGrid) {
     for (let i = -12; i < 4; i++) {
       for (const [skewDown, skewUp] of [[0,0], [0.5, 0.5], [-5,+5], [+5,-5]]) {
@@ -504,7 +503,6 @@ class MyMesh extends Mesh {
     // remove dummy node
     this.contractEdge(outerHE);
     this.peers.delete(outerHE);
-
 
     tips.forEach(tip => {
       let [he0, he1] = tip.halfEdgesOut();
