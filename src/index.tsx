@@ -6,7 +6,7 @@ import * as G from "@babylonjs/gui";
 
 import './style.css';
 import { assert, choose, count, fail, findUnique, getLines, log, setLogger } from './utils';
-import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotatePoints, rotXY60, TAU, interpolate } from './geom-utils';
+import { closeTo0, distance, XYZ, intersect3Spheres, MV, projectPointToLine, rotXY60, TAU, interpolate } from './geom-utils';
 import { findHE, HalfEdge, Loop, Mesh, Vertex } from './mesh';
 import examples from './examples';
 import triangulate from './triangulate';
@@ -960,15 +960,18 @@ class MyMesh extends Mesh {
   }
 
   rotatePoints(pivot: MV, from: MV, to: MV, vertices: Set<Vertex>) {
-    const {pos, setPos} = this;
-    rotatePoints(pivot, from, to,
-      vertices.values().map(v => ({
-        // Backward-compatibility hack:
-        // Give rotatePoints(...) to read and write a member pos.
-        get pos() { return pos(v); },
-        set pos(value) { setPos(v, value)},
-      })).toArray(),
-    );
+    const dir1 = XYZ.normalize(XYZ.minus(to, pivot));
+    const dir2 = XYZ.normalize(XYZ.minus(from, pivot));
+    const dirMid = XYZ.normalize(XYZ.plus(dir1, dir2));
+    const rot = XYZ.geometricProduct(dir1, dirMid);
+    const transformOffset = XYZ.sandwich(rot);
+    const transformPoint = (point: MV) =>
+      XYZ.plus(transformOffset(XYZ.minus(point, pivot)), pivot);
+    const angle = XYZ.getAngle(XYZ.minus(from, pivot), XYZ.minus(to, pivot));
+    log(`rotation around: ${pivot} from ${from} to ${to};\n  angle: ${(angle * 180 / Math.PI).toFixed(5)}° = ${angle}`);
+    for (const v of vertices) {
+      this.positions.set(v, transformPoint(this.positions.get(v)));
+    }
   }
 
   /**
