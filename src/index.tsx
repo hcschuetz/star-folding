@@ -859,10 +859,14 @@ class MyMesh extends Mesh {
    * The only argument should be the number of iterations.
    */
   contract(args: string[]) {
-    if (args.length !== 1) fail(`"contract" expects 1 argument`);
+    if (args.length !== 2) fail(`"contract" expects 2 argument`);
     const nSteps = Number.parseInt(args[0]);
     if (Number.isNaN(nSteps) || nSteps < 1) fail(
       `The argument of "contract" should be the number of optimization steps.`
+    );
+    const tipName = args[1];
+    if (this.vertices.values().some(v => v.name === tipName)) fail(
+      `New tip name "${tipName}" already in use.`
     );
 
     const {vertices, loops, boundary, pos, setPos} = this;
@@ -921,6 +925,9 @@ class MyMesh extends Mesh {
     // convergence, but it didn't.
 
     this.gluePeers();
+    const tip = vertices.values().find(v => v.name.includes("^"));
+    assert(!!tip);
+    tip.name = tipName;
   }
 
   /** Where `vb` would like to place `va` so that the distance is `len` */

@@ -43,7 +43,7 @@ bend .5 i.1 a b.0
 bend .5 j.0 h k d h
 bend .5 a j.1
 
-contract 100
+contract 100 l
 `,
   },
   icosahedron: {
@@ -154,7 +154,7 @@ bend .5 k d
 bend .5 k f
 bend .5 k h
 
-contract 100
+contract 100 l
 `,
   },
   empty: {

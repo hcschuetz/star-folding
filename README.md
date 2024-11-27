@@ -217,7 +217,9 @@ After the geometric contraction (moving corresponding vertices together)
 also a topological contraction (merging of corresponding vertices and edges)
 is applied. 
 
-`contract` takes one argument, namely the number of iterations.
+`contract` takes two arguments:
+- the number of iterations and
+- a name for the vertex where all the former star tips meet.
 
 
 Output
