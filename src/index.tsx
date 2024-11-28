@@ -599,8 +599,10 @@ class MyMesh extends Mesh {
         if (he.from.name > he.to.name) continue; // avoid duplicate output
         // TODO compute a directed angle (as seen when looking along the half-edge)?
         const angle = XYZ.getAngle(this.faceOrientation(he), this.faceOrientation(he.twin));
+        const length = XYZ.dist(this.pos(he.from), this.pos(he.to));
         edgeMessages.push(
-          `${he.from.name}->${he.to.name}: ${((.5-angle/TAU)*360).toFixed(5)}° ${
+          `${he.from.name}->${he.to.name}: ${
+            length.toFixed(5)}, ${((.5-angle/TAU)*360).toFixed(5)}° ${
             he.from} ==[${he}(${he.loop})|${he.twin}(${he.twin.loop})]==> ${he.to}`
         );
       }
