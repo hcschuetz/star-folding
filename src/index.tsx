@@ -448,7 +448,10 @@ class MyMesh extends Mesh {
   boundary: Loop;
   positions = new WeakMap<Vertex, MV>();
   setPos = (v: Vertex, pos: MV) => this.positions.set(v, pos);
-  pos = (v: Vertex) => this.positions.get(v);
+  pos = (v: Vertex) => {
+    if (!this.positions.has(v)) fail(`vertex ${v} has no position`);
+    return this.positions.get(v);
+  }
 
   // TODO make this a WeakMap?
   peers = new Map<HalfEdge, HalfEdge>();
@@ -570,20 +573,18 @@ class MyMesh extends Mesh {
     const {vertices, loops, peers} = this;
     for (const l of loops) {
       log(l, "=", ...[...l.halfEdges()].flatMap(he => [he, he.to]));
-      log(`  = (${count(l.halfEdges())}):`, ...[...l.halfEdges()].map(he => he.to.name));
+      log(`  = (${count(l.halfEdges())}):`, ...[...l.halfEdges().map(he => he.to.name)]);
     }
     for (const v of vertices) {
-      const neighbors = [...v.neighbors()];
-      log(
-        v.toString().padEnd(15), v.firstHalfEdgeOut,
-        this.pos(v).toString().padEnd(50) ?? "MISSING",
-        neighbors.length, "neighbors:", neighbors.join(" ").padEnd(35),
-        "faces:", [...v.loops()].join(" "),
-      );
+      log(v, ":", ...[...v.halfEdgesOut()].flatMap(he => [he.loop, he]));
+      log(`  : (${count(v.halfEdgesOut())}):`, ...[...v.halfEdgesOut().flatMap(he => [he.loop.name, he.to.name])]);
     }
-    for (const [vi, vj] of choose([...vertices], 2)) {
-      const dist = this.distance(vi, vj);
-      if (dist < 1e-4) log(`Nearby: ${vi}, ${vj} (${dist})`);
+    for (const v1 of vertices) {
+      const nearby =
+        vertices.values()
+        .filter(v2 => v2 !== v1 && this.distance(v1, v2) < 1e-4)
+        .toArray();
+      if (nearby.length > 0) log(`Nearby ${v1}:`, ...nearby);
     }
     log(`${
       vertices.size} vertices (${
