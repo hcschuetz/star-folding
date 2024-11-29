@@ -948,8 +948,9 @@ class MyMesh extends Mesh {
       const [he0, he1] = peers.entries().find(([he0, he1]) => he0.to === he1.from);
       log(`gluing ${he0}, ${he1} at ${he0.to}`);
       const [he2, he3] = this.splitLoop(he0.prev, he1, {create: "right"});
+      const mergedName = mergeNames(he2.to.name, he2.from.name);
       this.contractEdge(he2);
-      he2.from.name = mergeNames(he2.to.name, he2.from.name);
+      he2.from.name = mergedName;
       this.dropEdge(he0);
       assert(peers.delete(he0));
       assert(peers.delete(he1));
