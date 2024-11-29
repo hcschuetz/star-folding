@@ -137,8 +137,8 @@ export class Mesh {
    * Create a new twin pair of half edges adjacent to the given loops and vertices.
    * 
    * The returned pair consists of
-   * - the half edge adjacent to `l0` and pointing from `v0` to `v1` and
-   * - the half edge adjacent to `l1` and pointing from `v1` to `v0`.
+   * - a half edge adjacent to `l0`, pointing from `v0` to `v1` and
+   * - a half edge adjacent to `l1`, pointing from `v1` to `v0`.
    */
   makeEdge(
     l0: Loop, l1: Loop,
@@ -156,7 +156,7 @@ export class Mesh {
     return [he0, he1];
   }
 
-  /** Create a 2-sided 1-gon. */
+  /** Create a 2-sided 1-gon out of thin air. */
   addCore() {
     const v = this.makeVertex("core");
     const l0 = this.makeLoop("core1");
@@ -169,6 +169,25 @@ export class Mesh {
     l0.firstHalfEdge = he0;
     l1.firstHalfEdge = he1;
     return edge;
+  }
+
+  /** Eliminate a 2-sided 1-gon as created by `.addCore()` */
+  dropCore(v: Vertex) {
+    const he = v.firstHalfEdgeOut;
+    const {twin} = he;
+    if (!(
+      he.to === v &&
+      he.prev === he &&
+      he.next === he &&
+      twin.to === v &&
+      twin.prev === twin &&
+      twin.next === twin
+    )) this.fail(`trying to drop non-core at ${v}`);
+    this.vertices.delete(v);
+    this.loops.delete(he.loop);
+    this.loops.delete(twin.loop);
+    he.alive = false;
+    twin.alive = false;
   }
 
   /**
@@ -184,6 +203,8 @@ export class Mesh {
     he1: HalfEdge,
     options?: {create: "left" | "right" | "both"},
   ): Edge {
+    if (!he0.alive) this.fail(`splitVertex with dead half edge ${he0}`);
+    if (!he1.alive) this.fail(`splitVertex with dead half edge ${he1}`);
     const v = he0.to;
     if (he1.to !== v) this.fail(
       `splitVertex: parameters point to different vertices: ${v} !== ${he1.to}`
@@ -218,6 +239,8 @@ export class Mesh {
     he1: HalfEdge,
     options?: {create: "left" | "right" | "both"},
   ): Edge {
+    if (!he0.alive) this.fail(`splitLoop with dead half edge ${he0}`);
+    if (!he1.alive) this.fail(`splitLoop with dead half edge ${he1}`);
     const l = he0.loop;
     if (he1.loop !== l) this.fail(
       `splitLoop: parameters point to different loops: ${l} !== ${he1.loop}`
@@ -258,24 +281,45 @@ export class Mesh {
    * Return the latter.
    */
   contractEdge(he: HalfEdge) {
-    const {
-      to, loop, prev, next,
-      twin: {to: from, loop: twin_loop, prev: twin_prev, next: twin_next},
-    } = he;
+    if (!he.alive) this.fail(`contractEdge with dead half edge ${he}`);
+    if (!he.twin.alive) this.fail(`contractEdge with dead half-edge twin ${he.twin}`);
+    const {to, loop, prev, next, twin} = he;
+    const {to: from, loop: twin_loop, prev: twin_prev, next: twin_next} = twin;
     if (to === from) this.fail(
       `cannot contract an edge starting and ending at the same vertex`
     );
 
-    for (let heAux = twin_prev; heAux !== he; heAux = heAux.twin.prev) {
+    for (const heAux of to.halfEdgesIn().toArray()) {
       heAux.to = from;
     }
 
-    chainHEs(prev, next);
-    chainHEs(twin_prev, twin_next);
-
-    loop.firstHalfEdge = next;
-    twin_loop.firstHalfEdge = twin_next;
-    from.firstHalfEdgeOut = next;
+    if (twin === next) {
+      if (twin === prev) this.fail(
+        // Can this actually happen?
+        `Trying to contract an edge between two vertices that have no other edges.`
+      );
+      if (loop !== twin_loop) this.fail(
+        `The half edges of single-edge vertex ${to} should be adjacent to the same loop\n` +
+        `but are adjacent to ${loop} and ${twin_loop}.`
+      )
+      chainHEs(prev, twin_next);
+      loop.firstHalfEdge = twin_next;
+      from.firstHalfEdgeOut = twin_next;
+    } else if (twin === prev) {
+      if (loop !== twin_loop) this.fail(
+        `The half edges of single-edge vertex ${from} should be adjacent to the same loop\n` +
+        `but are adjacent to ${loop} and ${twin_loop}.`
+      );
+      chainHEs(twin_prev, next);
+      loop.firstHalfEdge = next;
+      from.firstHalfEdgeOut = next;
+    } else {
+      chainHEs(prev, next);
+      chainHEs(twin_prev, twin_next);
+      loop.firstHalfEdge = next;
+      twin_loop.firstHalfEdge = twin_next;
+      from.firstHalfEdgeOut = next;
+    }
 
     this.vertices.delete(to);
     he.alive = false;
@@ -289,6 +333,8 @@ export class Mesh {
    * Return the latter.
    */
   dropEdge(he: HalfEdge) {
+    if (!he.alive) this.fail(`dropEdge with dead half edge ${he}`);
+    if (!he.twin.alive) this.fail(`dropEdge with dead half-edge twin ${he.twin}`);
     const {
       to, loop, prev, next,
       twin: {to: from, loop: twin_loop, prev: twin_prev, next: twin_next},
