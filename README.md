@@ -1,3 +1,25 @@
+```
+```
+--------------------------------------------------------------------------------
+
+THIS PROJECT HAS BEEN ABANDONED
+===============================
+
+It has turned out that some early design decisions in this project were not
+helpful.  (In particular the step-by-step approach to folding did not work out.)
+So I started over in the new project
+
+> **https://github.com/hcschuetz/polyhedron-star**
+
+making use of experience gained with this project here.
+That project has meanwhile got more functionality.
+
+I leave this project around just for reference.
+
+--------------------------------------------------------------------------------
+```
+```
+
 Folding a Star to a Polyhedron
 ==============================
 
